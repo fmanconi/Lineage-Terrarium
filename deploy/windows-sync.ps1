@@ -71,10 +71,12 @@ if ($UseLocalUI) {
         if (-not (Test-Path $PyExe)) {
             $PyExe = Join-Path $RepoDir ".venv\Scripts\python.exe"
         }
-        Start-Process -FilePath $PyExe `
-            -ArgumentList @("-m", "http.server", "$LocalPort", "--bind", "127.0.0.1", "--directory", $DistDir) `
-            -WindowStyle Hidden | Out-Null
-        Start-Sleep -Milliseconds 500
+        $HttpArgs = "-m http.server $LocalPort --bind 127.0.0.1 --directory `"$DistDir`""
+        Start-Process -FilePath $PyExe -ArgumentList $HttpArgs -WindowStyle Hidden | Out-Null
+        for ($i = 0; $i -lt 15; $i++) {
+            if (Test-TcpPort -TargetHost "127.0.0.1" -TargetPort $LocalPort -TimeoutMs 250) { break }
+            Start-Sleep -Milliseconds 200
+        }
     }
     $StreamWs = [System.Uri]::EscapeDataString("ws://${ServerHost}:${Port}/stream")
     $AppUrl = "http://127.0.0.1:${LocalPort}/?source=${StreamWs}&desktop=1"
@@ -82,7 +84,7 @@ if ($UseLocalUI) {
     $AppUrl = "http://${ServerHost}:${Port}/?desktop=1"
 }
 
-# 3. Launch chromeless pixel-art window (1280x750 = exact 5x integer scale of 256x150 art canvas)
+# 3. Launch chromeless pixel-art window (1280x780 = exact 5x integer scale of 256x150 art canvas + titlebar)
 $Browsers = @(
     "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
     "${env:ProgramFiles}\Microsoft\Edge\Application\msedge.exe",
@@ -93,15 +95,11 @@ $BrowserExe = $Browsers | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if ($BrowserExe) {
     $ProfileDir = Join-Path $env:LOCALAPPDATA "LineageSmerdinoViewer"
-    $BrowserArgs = @(
-        "--user-data-dir=$ProfileDir",
-        "--app=$AppUrl",
-        "--window-size=1280,780"
-    )
+    $BrowserArgLine = "--user-data-dir=`"$ProfileDir`" --app=`"$AppUrl`" --window-size=1280,780"
     if ($Fullscreen) {
-        $BrowserArgs += "--start-fullscreen"
+        $BrowserArgLine += " --start-fullscreen"
     }
-    Start-Process -FilePath $BrowserExe -ArgumentList $BrowserArgs | Out-Null
+    Start-Process -FilePath $BrowserExe -ArgumentList $BrowserArgLine | Out-Null
     Write-Host "Finestra sincronizzata avviata: $AppUrl" -ForegroundColor Green
 } else {
     Start-Process $AppUrl | Out-Null
