@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import MISSING, dataclass, fields
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, TypeVar, cast
@@ -639,6 +639,9 @@ class PresenceConfig:
     seed_count: int
     seed_rare_chance: float
     ark_count: int
+    solar_cycle: bool = False
+    latitude: float = 43.7228
+    longitude: float = 10.4017
 
     def __post_init__(self) -> None:
         def check(ok: bool, message: str) -> None:
@@ -660,6 +663,8 @@ class PresenceConfig:
                    self.god_weight_ark)  # fmt: skip
         check(sum(weights) > 0, "at least one god power needs a weight")
         check(self.meteor_blast_factor >= 1, "meteor_blast_factor must be at least 1")
+        check(-90 <= self.latitude <= 90, "latitude must be within [-90, 90]")
+        check(-180 <= self.longitude <= 180, "longitude must be within [-180, 180]")
 
 
 @dataclass(frozen=True)
@@ -838,11 +843,27 @@ def _calendar(raw: Mapping[str, Any]) -> CalendarConfig:
 def _numeric_section(raw: Mapping[str, Any], name: str, cls: type[_T]) -> _T:
     """Build a dataclass of int/float/bool fields from section ``[name]``, checking every
     key."""
-    types = {f.name: str(f.type) for f in fields(cast(Any, cls))}
-    section = _section(raw, name, frozenset(types))
+    all_fields = fields(cast(Any, cls))
+    types = {f.name: str(f.type) for f in all_fields}
+    required = {f.name for f in all_fields if f.default is MISSING}
+    defaults = {f.name: f.default for f in all_fields if f.default is not MISSING}
+    section_val = raw.get(name)
+    if not isinstance(section_val, dict):
+        raise ConfigError(f"missing section [{name}]")
+    section = cast(dict[str, Any], section_val)
+    unknown = set(section) - set(types)
+    missing = required - set(section)
+    if unknown:
+        raise ConfigError(f"unknown keys in [{name}]: {sorted(unknown)}")
+    if missing:
+        raise ConfigError(f"missing keys in [{name}]: {sorted(missing)}")
     values: dict[str, int | float | bool] = {}
     for key, kind in types.items():
-        value = section[key]
+        if key in section:
+            value = section[key]
+        else:
+            values[key] = defaults[key]
+            continue
         if kind == "bool":
             if not isinstance(value, bool):
                 raise ConfigError(f"[{name}] {key} must be true or false")

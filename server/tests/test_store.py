@@ -179,7 +179,11 @@ def test_kill_9_during_saves_leaves_a_loadable_save(tmp_path: Path) -> None:
         assert child.stdout is not None
         assert child.stdout.readline().strip() == "ready"
         time.sleep(chooser.uniform(0.0, 0.15))
-        child.send_signal(signal.SIGKILL)
+        sigkill = getattr(signal, "SIGKILL", None)
+        if sigkill is not None:
+            child.send_signal(sigkill)
+        else:
+            child.kill()
         child.wait()
         child.stdout.close()
         store.clean()

@@ -20,6 +20,7 @@ import datetime as dt
 import logging
 import os
 import re
+import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,11 +43,12 @@ def write_atomic(path: Path, data: bytes) -> None:
         file.flush()
         os.fsync(file.fileno())
     os.replace(tmp, path)
-    directory = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+    if sys.platform != 'win32':
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
 
 def save_name(unix_ms: int) -> str:

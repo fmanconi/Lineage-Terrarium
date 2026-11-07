@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from dataclasses import replace
 from pathlib import Path
@@ -382,3 +383,46 @@ def test_witnessed_events_are_seen_as_a_steps_own(config: Config) -> None:
     reach = config.fauna.blast_kill_reach * radius
     assert (np.hypot(offset[:, 0], offset[:, 1]) > reach).all()
     assert world.witness([]) == []
+
+
+def test_solar_elevation_pisa() -> None:
+    from lineage_sim.presence import PISA_LATITUDE, PISA_LONGITUDE, solar_elevation
+
+    # Summer solstice noon UTC (June 21, 2026, 12:00 UTC)
+    summer_noon = int(dt.datetime(2026, 6, 21, 12, 0, tzinfo=dt.UTC).timestamp() * 1000)
+    el_summer = solar_elevation(summer_noon, PISA_LATITUDE, PISA_LONGITUDE)
+    assert el_summer > 65.0  # high summer sun in Pisa
+
+    # Winter solstice midnight UTC (Dec 21, 2026, 00:00 UTC)
+    winter_mid = int(dt.datetime(2026, 12, 21, 0, 0, tzinfo=dt.UTC).timestamp() * 1000)
+    el_winter = solar_elevation(winter_mid, PISA_LATITUDE, PISA_LONGITUDE)
+    assert el_winter < -60.0  # deep night
+
+
+def test_solar_target_light(config: Config) -> None:
+    from lineage_sim.presence import solar_target_light
+
+    noon = int(dt.datetime(2026, 6, 21, 12, 0, tzinfo=dt.UTC).timestamp() * 1000)
+    light_noon = solar_target_light(config.presence, noon)
+    assert light_noon == 1.0
+
+    midnight = int(dt.datetime(2026, 6, 21, 0, 0, tzinfo=dt.UTC).timestamp() * 1000)
+    light_mid = solar_target_light(config.presence, midnight)
+    assert light_mid == config.presence.night_light
+
+
+def test_presence_solar_cycle_world(config: Config) -> None:
+    from lineage_sim.world import World
+
+    solar_cfg = replace(config.presence, solar_cycle=True)
+    full_cfg = replace(config, presence=solar_cfg)
+    # Start at midnight
+    midnight_ms = int(dt.datetime(2026, 6, 21, 0, 0, tzinfo=dt.UTC).timestamp() * 1000)
+    world, _ = World.create(full_cfg, seed=1, epoch_unix_ms=midnight_ms)
+    assert world.presence.light <= config.presence.night_light + 0.05
+    assert not world.presence.present
+
+    # Step to solar noon (12 hours later)
+    world.step(12 * 3600)
+    assert world.presence.light >= 0.95
+    assert world.presence.present

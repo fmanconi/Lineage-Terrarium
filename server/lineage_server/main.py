@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from lineage_device.fake import KeyboardDevice
+from lineage_device.fake import FakeDevice, KeyboardDevice
 from lineage_sim.config import parse_config
 
 from lineage_server.island import Island, new_seed
@@ -44,6 +46,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="the sim's config")
     parser.add_argument("--seed", type=int, help="the first world's seed (default: random)")
     parser.add_argument("--fake-device", action="store_true", help="keys on stdin (S1)")
+    parser.add_argument(
+        "--headless", action="store_true", help="run headless daemon without keyboard input"
+    )
+    parser.add_argument(
+        "--solar", action="store_true", help="enable real sun solar cycle (Europe/Rome)"
+    )
     parser.add_argument("--absent", action="store_true", help="the fake starts with no owner")
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -51,24 +59,28 @@ def main(argv: list[str] | None = None) -> None:
     )
     # Every page and socket opened is logged by websockets at INFO: too much for a journal.
     logging.getLogger("websockets").setLevel(logging.WARNING)
-    if not args.fake_device:
-        parser.error("the real device comes with S2: pass --fake-device")
     if args.dist is not None and not (args.dist / "index.html").is_file():
         parser.error(f"{args.dist} holds no index.html (cd renderer && npm run build:kiosk)")
     settings = load_settings(args.settings)
     config = parse_config(args.config.read_text(encoding="utf-8"))
+    if args.solar:
+        config = replace(config, presence=replace(config.presence, solar_cycle=True))
     seed = args.seed
     island = Island(
         config, Store(args.data), settings, seed=new_seed if seed is None else (lambda: seed)
     )
-    device = KeyboardDevice(present=not args.absent)
+    if args.headless or not sys.stdin.isatty():
+        device = FakeDevice(present=not args.absent)
+    else:
+        device = KeyboardDevice(present=not args.absent)
     server = Server(island, device, settings, dist=args.dist)
 
     async def run() -> None:
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for signum in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(signum, stop.set)
+            with contextlib.suppress(NotImplementedError):
+                loop.add_signal_handler(signum, stop.set)
         await server.run(stop)
 
     asyncio.run(run())

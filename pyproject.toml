@@ -39,7 +39,10 @@ markers = [
     "slow: long statistical tests, run nightly (`pytest -m slow`)",
     "criteria: M11's nightly check of every criterion on the tuned island (also slow)",
 ]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    "ignore:.*NPY_DISABLE_CPU_FEATURES.*:ImportWarning",
+]
 
 [tool.ruff]
 line-length = 100

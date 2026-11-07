@@ -789,6 +789,14 @@ seed_rare_chance = 0.1
 # Ark: a group of ark_count plant eaters lands on a vegetated spot, as founders do; hunters
 # instead when the herd has reached [fauna] hunter_wave_herd with no predators alive.
 ark_count = 12
+# Real sun cycle (solar_cycle): when true, daylight is synchronized with the real sun's
+# astronomical elevation in Europe/Rome (default coordinates: Pisa, 43.7228 N, 10.4017 E).
+# At dawn the light ramps up to 1.0 (full day, photosynthesis, fauna active), and at dusk
+# it falls to night_light (0.05, cosy moonlit blue) so the screen does not disturb sleep.
+# False keeps the original desk presence (PIR sensor) behaviour.
+solar_cycle = false
+latitude = 43.7228
+longitude = 10.4017
 
 [weather]
 # Rain of the island's own (R4; the owner, 2026-10-20). Spells of rain begin at random,

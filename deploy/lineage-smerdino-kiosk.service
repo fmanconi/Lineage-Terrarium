@@ -1,0 +1,38 @@
+[Unit]
+Description=Lineage Kiosk Screensaver on Chromium (Smerdino)
+Documentation=https://github.com/fmanconi/Lineage
+Wants=lineage-smerdino-server.service
+After=lineage-smerdino-server.service graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+
+# Attende che il server risponda a /status prima di aprire il browser
+ExecStartPre=/usr/bin/bash -c 'for i in {1..30}; do curl -s http://localhost:8080/status >/dev/null && exit 0; sleep 1; done; exit 1'
+
+ExecStart=/usr/bin/chromium \
+    --kiosk \
+    --no-first-run \
+    --no-default-browser-check \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-component-update \
+    --disable-background-networking \
+    --disable-features=Translate,MediaRouter \
+    --password-store=basic \
+    --autoplay-policy=no-user-gesture-required \
+    --disable-background-timer-throttling \
+    --disable-renderer-backgrounding \
+    --disable-backgrounding-occluded-windows \
+    --user-data-dir=%h/.lineage-smerdino-kiosk \
+    http://localhost:8080/?cap=30
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

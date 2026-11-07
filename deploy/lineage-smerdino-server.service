@@ -1,0 +1,33 @@
+[Unit]
+Description=Lineage Island Simulation (Smerdino Solar Cycle Server)
+Documentation=https://github.com/fmanconi/Lineage
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=simple
+# Assicurati che WorkingDirectory punti alla directory del repository clonata su smerdino:
+WorkingDirectory=%h/Lineage-Smerdino
+Environment=PYTHONUNBUFFERED=1
+
+# Comando di avvio: usa il file di configurazione smerdino.toml con solar_cycle attivo
+ExecStart=%h/Lineage-Smerdino/.venv/bin/python -m lineage_server.main \
+    --data %h/lineage-data \
+    --dist %h/Lineage-Smerdino/renderer/dist-kiosk \
+    --config %h/Lineage-Smerdino/sim/config/smerdino.toml \
+    --settings %h/Lineage-Smerdino/server/config/server.toml \
+    --solar \
+    --headless
+
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+# SIGTERM innesca il salvataggio atomico dello stato prima dell'arresto (fino a 30s)
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

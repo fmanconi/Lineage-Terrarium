@@ -20,6 +20,7 @@ subsystems are not saved; this subsystem pushes them again after a restore.
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from enum import Enum
 
@@ -64,6 +65,62 @@ def target_light(cfg: PresenceConfig, present: bool, absent_h: float) -> float:
     if present:
         return 1.0
     return cfg.moonlight if absent_h >= cfg.moonlight_after_hours else cfg.night_light
+
+
+# Pisa, Italy coordinates (Europe/Rome approximate reference)
+PISA_LATITUDE = 43.7228
+PISA_LONGITUDE = 10.4017
+
+
+def solar_elevation(
+    unix_ms: int, lat: float = PISA_LATITUDE, lon: float = PISA_LONGITUDE
+) -> float:
+    """Astronomical solar elevation in degrees above horizon for given UTC unix_ms."""
+    utc_dt = dt.datetime.fromtimestamp(unix_ms / 1000, tz=dt.UTC)
+    day_of_year = utc_dt.timetuple().tm_yday
+    hour_utc = utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0
+    gamma = 2.0 * math.pi / 365.25 * (day_of_year - 1 + (hour_utc - 12.0) / 24.0)
+    eqtime = 229.18 * (
+        0.000075
+        + 0.001868 * math.cos(gamma)
+        - 0.032077 * math.sin(gamma)
+        - 0.014615 * math.cos(2 * gamma)
+        - 0.040849 * math.sin(2 * gamma)
+    )
+    decl = (
+        0.006918
+        - 0.399912 * math.cos(gamma)
+        + 0.070257 * math.sin(gamma)
+        - 0.006758 * math.cos(2 * gamma)
+        + 0.000907 * math.sin(2 * gamma)
+        - 0.002697 * math.cos(3 * gamma)
+        + 0.00148 * math.sin(3 * gamma)
+    )
+    time_offset = eqtime + 4.0 * lon
+    tst = (hour_utc * 60.0 + time_offset) % 1440.0
+    ha = math.radians((tst / 4.0) - 180.0)
+    lat_rad = math.radians(lat)
+    cos_zenith = math.sin(lat_rad) * math.sin(decl) + math.cos(lat_rad) * math.cos(decl) * math.cos(
+        ha
+    )
+    cos_zenith = max(-1.0, min(1.0, cos_zenith))
+    return 90.0 - math.degrees(math.acos(cos_zenith))
+
+
+def solar_target_light(
+    cfg: PresenceConfig,
+    unix_ms: int,
+    lat: float = PISA_LATITUDE,
+    lon: float = PISA_LONGITUDE,
+    twilight_low_deg: float = -6.0,
+    twilight_high_deg: float = 6.0,
+) -> float:
+    """Target light mapped from real solar elevation: night_light at night, 1.0 in day."""
+    el = solar_elevation(unix_ms, lat=lat, lon=lon)
+    span = twilight_high_deg - twilight_low_deg
+    frac = max(0.0, min(1.0, (el - twilight_low_deg) / span))
+    smooth = frac * frac * (3.0 - 2.0 * frac)
+    return cfg.night_light + (1.0 - cfg.night_light) * smooth
 
 
 def next_light(cfg: PresenceConfig, light: float, target: float, hours: float) -> float:
@@ -198,11 +255,30 @@ class Presence:
         }
 
     def initialize(self, ctx: Context) -> list[OutputEvent]:
+        if self._cfg.solar_cycle and self._hours == 0.0:
+            target = solar_target_light(
+                self._cfg,
+                ctx.instant.unix_ms,
+                lat=self._cfg.latitude,
+                lon=self._cfg.longitude,
+            )
+            self._light = target
+            self._present = target > (self._cfg.night_light + 0.1)
+            self._push()
         return []
 
     def tick(self, ctx: Context) -> list[OutputEvent]:
         hours = ctx.dt_s / _SECONDS_PER_HOUR
-        target = target_light(self._cfg, self._present, self._absent_h)
+        if self._cfg.solar_cycle:
+            target = solar_target_light(
+                self._cfg,
+                ctx.instant.unix_ms,
+                lat=self._cfg.latitude,
+                lon=self._cfg.longitude,
+            )
+            self._present = target > (self._cfg.night_light + 0.1)
+        else:
+            target = target_light(self._cfg, self._present, self._absent_h)
         self._light = next_light(self._cfg, self._light, target, hours)
         self._light_hours += self._light * hours
         self._hours += hours
@@ -221,7 +297,11 @@ class Presence:
         return []
 
     def handle(self, event: InputEvent, ctx: Context) -> list[OutputEvent]:
-        if isinstance(event, PresenceChanged) and event.present != self._present:
+        if (
+            isinstance(event, PresenceChanged)
+            and event.present != self._present
+            and not self._cfg.solar_cycle
+        ):
             self._present = event.present
             self._absent_h = 0.0
         if isinstance(event, GodPower):
