@@ -85,3 +85,24 @@ systemctl --user enable --now lineage-smerdino-server.service
 systemctl --user status lineage-smerdino-server.service
 curl -s http://localhost:8080/status
 ```
+
+### 4. Aggiornamenti Automatici da Remoto (mentre il gioco gira)
+Se sviluppi o modifichi il codice dal tuo PC principale e vuoi che "smerdino" si aggiorni automaticamente senza interrompere la simulazione o perdere lo stato:
+
+#### Opzione A: Timer automatico (ogni 2 minuti)
+```bash
+cp deploy/lineage-smerdino-autoupdate.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now lineage-smerdino-autoupdate.timer
+```
+Il timer verifica periodicamente la presenza di nuovi commit su `origin/main`:
+- Se non ci sono novità, non fa nulla.
+- Se trova commit: scarica le modifiche, esegue `uv sync` o ricompila `dist-kiosk` solo se necessario, e se il codice Python è cambiato riavvia il server inviando prima `SIGTERM` per preservare il salvataggio atomico del mondo in corso!
+
+#### Opzione B: Aggiornamento manuale su richiesta
+Puoi lanciare in qualsiasi momento:
+```bash
+chmod +x deploy/smerdino-update.sh
+./deploy/smerdino-update.sh
+```
+

@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer per auto-aggiornamento di Lineage da GitHub
+
+[Timer]
+# Controlla aggiornamenti ogni 2 minuti
+OnBootSec=1min
+OnUnitActiveSec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

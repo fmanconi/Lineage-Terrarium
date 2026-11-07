@@ -1,0 +1,8 @@
+[Unit]
+Description=Lineage Smerdino Git Auto-Updater
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Lineage-Smerdino
+ExecStart=%h/Lineage-Smerdino/deploy/smerdino-update.sh
