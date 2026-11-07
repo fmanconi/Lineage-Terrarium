@@ -73,10 +73,11 @@ async def _next(client: ClientConnection, kind: str) -> list[dict[str, Any]]:
                 return got
 
 
-async def _get(url: str) -> tuple[int, bytes]:
+async def _get(url: str, method: str = "GET") -> tuple[int, bytes]:
     def fetch() -> tuple[int, bytes]:
+        req = urllib.request.Request(url, method=method)
         try:
-            with urllib.request.urlopen(url, timeout=WAIT_S) as response:
+            with urllib.request.urlopen(req, timeout=WAIT_S) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.read()
@@ -202,5 +203,57 @@ def test_a_client_that_goes_is_forgotten(tmp_path: Path, path: str) -> None:
         async with asyncio.timeout(WAIT_S):
             while server.clients:
                 await asyncio.sleep(0.01)
+
+    _serve(tmp_path, test)
+
+
+def test_god_power_http_status_invoke_cooldown_and_desk_only(tmp_path: Path) -> None:
+    async def test(server: Server, clock: HandClock, device: FakeDevice) -> None:
+        base = f"http://127.0.0.1:{server.port}"
+        async with connect(f"ws://127.0.0.1:{server.port}/stream") as desk:
+            await _next(desk, "creatures")
+            code, body = await _get(base + "/god-power")
+            assert code == 200
+            initial = json.loads(body)
+            assert set(initial["needs"].keys()) == {"rain", "seed", "ark"}
+
+            # Phone cannot invoke the weekly miracle.
+            code, _ = await _get(base + "/god-power?phone", method="POST")
+            assert code == 403
+
+            # If the fixture save is currently cooling down, fast-forward the hand clock past it.
+            if not initial["ready"]:
+                assert initial["remaining_ms"] > 0
+                clock.now += int(initial["remaining_ms"]) + MINUTE
+                await _next(desk, "sky")
+                code, body = await _get(base + "/god-power")
+                assert code == 200
+                ready_now = json.loads(body)
+                assert ready_now["ready"] is True
+                assert ready_now["remaining_ms"] == 0
+
+            # Desk invokes the weekly miracle; stream receives god_power event and cooldown starts.
+            code, body = await _get(base + "/god-power", method="POST")
+            assert code == 200
+            fired = json.loads(body)
+            assert fired["invoked"] is True
+            assert fired["power"] in {"meteor", "rain", "seed", "ark"}
+            assert fired["ready"] is False
+            assert fired["remaining_ms"] > 0
+
+            events_msgs = await _next(desk, "events")
+            assert any(
+                ev.get("kind") == "god_power"
+                for m in events_msgs
+                if m["type"] == "events"
+                for ev in m["events"]
+            )
+
+            # Second invocation during cooldown is refused with 409.
+            code, body = await _get(base + "/god-power", method="POST")
+            assert code == 409
+            refused = json.loads(body)
+            assert refused["invoked"] is False
+            assert refused["ready"] is False
 
     _serve(tmp_path, test)

@@ -30,7 +30,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
-from lineage_device.interface import Device
+from lineage_device.interface import Device, GodPowerPressed
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
 from websockets.exceptions import ConnectionClosed
@@ -44,6 +44,7 @@ log = logging.getLogger(__name__)
 
 STREAM_PATH = "/stream"
 STATUS_PATH = "/status"
+GOD_POWER_PATH = "/god-power"
 _T = TypeVar("_T")
 
 
@@ -214,14 +215,63 @@ class Server:
             "rss_mb": _rss_mb(),
         }
 
-    def _http(self, connection: ServerConnection, request: Request) -> Response | None:
+    async def _http(self, connection: ServerConnection, request: Request) -> Response | None:
         path = request.path.split("?", 1)[0]
         if path == STREAM_PATH:
             return None
         if path == STATUS_PATH:
             body = json.dumps(self.status()).encode()
             return _response(HTTPStatus.OK, body, "application/json")
+        if path == GOD_POWER_PATH:
+            return await self._god_power_http(connection, request)
         return self._file(path)
+
+    async def _god_power_http(
+        self, connection: ServerConnection, request: Request
+    ) -> Response:
+        if not self._ready.is_set():
+            return _response(
+                HTTPStatus.SERVICE_UNAVAILABLE, b'{"ready":false}', "application/json"
+            )
+        method = getattr(request, "method", "GET").upper()
+        if method == "GET":
+            async with self._lock:
+                data = await self._in_sim(self.island.miracle_status)
+            return _response(HTTPStatus.OK, json.dumps(data).encode(), "application/json")
+        if method == "POST":
+            if not self.is_desk(connection):
+                return _response(
+                    HTTPStatus.FORBIDDEN, b'{"error":"desk_only"}', "application/json"
+                )
+            async with self._lock:
+                now = self.clock.now_ms()
+
+                def invoke(
+                    now: int = now,
+                ) -> tuple[list[str], list[str], str | None, dict[str, Any]]:
+                    reply = self.island.handle(GodPowerPressed(), now)
+                    power_used: str | None = None
+                    for msg in reply.everyone:
+                        if msg.get("type") == "events":
+                            for ev in msg.get("events", []):
+                                if ev.get("kind") == "god_power":
+                                    power_used = str(ev.get("power"))
+                    return (
+                        _encode(reply.everyone),
+                        _encode(reply.desk),
+                        power_used,
+                        self.island.miracle_status(),
+                    )
+
+                everyone, desk, power_used, status_data = await self._in_sim(invoke)
+                self._hand(everyone, desk)
+                self._led()
+            payload = {"invoked": power_used is not None, "power": power_used, **status_data}
+            code = HTTPStatus.OK if power_used is not None else HTTPStatus.CONFLICT
+            return _response(code, json.dumps(payload).encode(), "application/json")
+        return _response(
+            HTTPStatus.METHOD_NOT_ALLOWED, b'{"error":"method_not_allowed"}', "application/json"
+        )
 
     def _file(self, path: str) -> Response:
         if self.dist is None:

@@ -46,13 +46,24 @@ longitude = 10.4017  # Fuso Europe/Rome
 - **`deploy/lineage-smerdino-server.service`**: Unit systemd per avviare il simulatore come servizio utente persistente al boot.
 - **`deploy/lineage-smerdino-kiosk.service`**: Unit systemd per avviare Chromium a schermo intero nella sessione grafica.
 
+### D. Taccuino delle Specie (`Field Guide`), Regia Screensaver, Miracolo & Barra Tasti
+Interfaccia in-game interamente dipinta in pixel art (`512×300` art pixels, font bitmap `pixelfont.ts`, cornici in legno smussato e carta crema come `card.ts`, illuminazione notturna calda `lantern`):
+- **Tasto `Tab` o `M` — Taccuino da Naturalista a 3 segnalibri** (con auto-chiusura dopo 15 minuti di inattività):
+  1. **`1 Species` (Specie Viventi & Tavola Anatomica)**: censimento live dell'isola (specie vive/estinte, proporzione erbivori/onnivori/predatori) e scheda dettagliata con ritratto procedurale `44×44` (`Portraits`), barre dei geni medi (`Size`, `Diet`, `Speed`, `Armour`, `Water`, `Sense`), icone `7×7` dei geni rari e stato live. Premendo **`Enter`** il taccuino si chiude e la telecamera `local` insegue dal vivo un esemplare sveglio di quella specie.
+  2. **`2 Lineage` (Albero Filogenetico)**: cladogramma evolutivo a doppia pagina che traccia i ceppi fondatori, le speciazioni figlie e i rami estinti (`†`).
+  3. **`3 Island` (Regia Screensaver, Cielo di Pisa & Miracolo Settimanale)**:
+     - **Filosofia 1:1 preservata**: nessun comando di avanzamento rapido o alterazione della velocità sull'isola viva.
+     - **Opzioni Screensaver** (salvate in `localStorage`): *Camera Director* (`Rest on Map` dopo 15m vs `Auto-Tour` documentario autonomo `map → middle → local`), *Night Dimmer* (`Normal` / `Soft Dim` / `Dark Room` per attenuare ulteriormente il chiarore notturno in camera da letto), *Key Hint Bar* (`Auto 10s` / `Always` / `Hidden`), *Chronicle Scrolls* (`Shown` / `Quiet`) e *Frame Rate Cap* (`30 FPS` / `60 FPS`).
+     - **Miracolo Settimanale (`God Power`, tasto `G` o endpoint `GET/POST /god-power`)**: espone via HTTP locale per il solo desk il pulsante fisico di Lineage con ricarica reale di **7 giorni**, mostrando il conto alla rovescia e i bisogni ecologici dell'isola (`Rain`, `Seed`, `Ark`).
+- **Micro-Barra Tasti in basso a destra (`KeyBar`)**: mostra i comandi contestuali con keycap in pixel art (`[V] View`, `[Tab] Guide`, `[G] Miracle`), scomparendo dolcemente dopo 10 secondi di inattività per lasciare il quadro pulito.
+
 ---
 
 ## 3. Guida all'Installazione su PC Ubuntu ("Smerdino")
 
 ### 1. Clonazione e Setup ambiente
 ```bash
-git clone https://github.com/fmanconi/Lineage.git ~/Lineage-Smerdino
+git clone https://github.com/fmanconi/Lineage-Smerdino.git ~/Lineage-Smerdino
 cd ~/Lineage-Smerdino
 
 # Installazione dipendenze con uv

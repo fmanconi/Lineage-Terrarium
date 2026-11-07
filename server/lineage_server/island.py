@@ -28,7 +28,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from lineage_device.interface import (
     DeviceEvent,
@@ -49,6 +49,7 @@ from lineage_sim.events import (
 )
 from lineage_sim.events import PowerLost as SimPowerLost
 from lineage_sim.events import PowerRestored as SimPowerRestored
+from lineage_sim.presence import solar_elevation
 from lineage_sim.rng import FAUNA, FLORA, PRESENCE
 from lineage_sim.state import io
 from lineage_sim.world import World
@@ -141,6 +142,26 @@ class Island:
         """Whether the god power is cooling down (the LED is lit)."""
         world = self.world
         return world.t_ms < world.presence.ready_t_ms
+
+    def miracle_status(self) -> dict[str, Any]:
+        """Status of the weekly god-power miracle and real solar cycle (for the kiosk UI)."""
+        world = self.world
+        cfg = world.config.presence
+        remaining_ms = max(0, world.presence.ready_t_ms - world.t_ms)
+        needs = {p.value: round(v, 3) for p, v in world.presence.needs(world.instant).items()}
+        closed = [p.value for p in world.presence.closed()]
+        return {
+            "ready": remaining_ms == 0,
+            "remaining_ms": remaining_ms,
+            "cooldown_days": round(float(cfg.god_cooldown_days), 3),
+            "needs": needs,
+            "closed": closed,
+            "solar_cycle": bool(cfg.solar_cycle),
+            "solar_elevation_deg": round(
+                solar_elevation(world.unix_ms, lat=cfg.latitude, lon=cfg.longitude), 1
+            ),
+            "light": round(float(world.presence.light), 3),
+        }
 
     def _timed(self, work: Callable[[], _T]) -> _T:
         start = time.thread_time()

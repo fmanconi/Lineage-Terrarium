@@ -112,7 +112,17 @@ import {
   type PaintRequest,
 } from "./terrain/painter";
 import { Bench, type BootMarks } from "./bench";
-import { capFrames } from "./framecap";
+import type { Rgb } from "./atmosphere/light";
+import { FieldGuide, type MiracleStatus } from "./fieldguide";
+import { createFrameCap } from "./framecap";
+import { KeyBar } from "./keybar";
+import {
+  SETTINGS_STORAGE_KEY,
+  loadSettings,
+  nightVeilAlpha,
+  saveSettings,
+  type SmerdinoSettings,
+} from "./settings";
 
 /** Screen pixels per art pixel (ADR 0007). */
 const ART = 2;
@@ -246,6 +256,8 @@ declare global {
     __painting?: () => boolean;
     /** Move the atmosphere on by this many seconds (tests; with `?still` the only way it moves). */
     __advance?: (seconds: number) => void;
+    /** Inspect or toggle the naturalist's field guide (tests). */
+    __guide?: () => { open: boolean; tab: string; species: number; totalCreatures: number };
   }
 }
 
@@ -359,7 +371,10 @@ async function start(): Promise<void> {
   );
   // The name card of the animal followed, in the top-left corner (R5).
   const card = new NameCard(WIDTH, HEIGHT);
-  frame.append(captions.element, card.element);
+  // The naturalist's double-page field guide (`Tab` / `M`) and bottom-right key hint bar.
+  const fieldGuide = new FieldGuide(WIDTH, HEIGHT);
+  const keyBar = new KeyBar(WIDTH, HEIGHT);
+  frame.append(captions.element, card.element, fieldGuide.element, keyBar.element);
   // The showcase's lines and titles, and its frame counter with `?fps`.
   const overlay = showcasing ? new Overlay(WIDTH, HEIGHT) : null;
   if (overlay !== null) frame.append(overlay.title, overlay.line, overlay.counter);
@@ -435,6 +450,14 @@ async function start(): Promise<void> {
     marker.container,
     atmosphere.sky,
   );
+  // Optional bedroom night-dimming veil (Smerdino screensaver), beneath dip and iris.
+  const nightDim = new Sprite(Texture.WHITE);
+  nightDim.tint = DIP_COLOUR;
+  nightDim.width = app.screen.width;
+  nightDim.height = app.screen.height;
+  nightDim.alpha = 0;
+  nightDim.visible = false;
+  app.stage.addChild(nightDim);
   // The dip between views, drawn last on the canvas itself (R5, the owner on the board: an
   // element laid over the canvas left what was drawn before showing through), over the
   // whole canvas with its margin.
@@ -532,7 +555,89 @@ async function start(): Promise<void> {
   // choices drawn earlier); films and stills draw them when they always did.
   director.looksAhead = params.get("film") === null && params.get("still") === null;
 
+  const hasSavedSettings = (() => {
+    try {
+      return (
+        typeof localStorage !== "undefined" && localStorage.getItem(SETTINGS_STORAGE_KEY) !== null
+      );
+    } catch {
+      return false;
+    }
+  })();
+  let settings: SmerdinoSettings = loadSettings();
+  const urlCap = params.get("cap");
+  if (!hasSavedSettings && urlCap !== null) {
+    settings = { ...settings, fpsCap: Number(urlCap) >= 60 ? 60 : 30 };
+  }
+  director.autoTour =
+    pinned === null && !film && !still && !showcasing && bench === null && settings.autoTour;
+
+  let applyFpsCap: (fps: number) => void = () => undefined;
+  const updateSettings = (next: SmerdinoSettings): void => {
+    settings = next;
+    saveSettings(settings);
+    director.autoTour =
+      pinned === null && !film && !still && !showcasing && bench === null && settings.autoTour;
+    if (bench === null && !film) {
+      applyFpsCap(settings.fpsCap === 60 ? 0 : 30);
+    }
+  };
+
+  // Live server `/god-power` status polling and weekly miracle invocation.
+  const pollMiracle = async (): Promise<void> => {
+    if (socket === null) return;
+    try {
+      const resp = await fetch("/god-power", { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = (await resp.json()) as MiracleStatus;
+      fieldGuide.setMiracleStatus(data);
+    } catch {
+      // Offline or static server: keep miracle seal gracefully disabled.
+    }
+  };
+
+  let invokingMiracle = false;
+  const invokeMiracle = async (fromShortcut = false): Promise<void> => {
+    if (invokingMiracle) return;
+    if (socket === null) {
+      if (fromShortcut && !fieldGuide.open && !atmosphere.ending) {
+        fieldGuide.setTab("island");
+        fieldGuide.toggle();
+      }
+      return;
+    }
+    invokingMiracle = true;
+    try {
+      const resp = await fetch("/god-power", { method: "POST" });
+      const data = (await resp.json()) as MiracleStatus & {
+        invoked?: boolean;
+        power?: string | null;
+      };
+      if (data.invoked === true) {
+        const powerLabel = (data.power ?? "miracle").toUpperCase();
+        fieldGuide.setMiracleStatus(data, `Miracle granted: ${powerLabel}!`);
+        if (fieldGuide.open) fieldGuide.close();
+      } else {
+        fieldGuide.setMiracleStatus(data, "Still recharging (7-day seal)");
+        if (fromShortcut && !fieldGuide.open && !atmosphere.ending) {
+          fieldGuide.setTab("island");
+          fieldGuide.toggle();
+        }
+      }
+    } catch {
+      // Ignore network hiccup.
+    } finally {
+      invokingMiracle = false;
+    }
+  };
+
+  if (socket !== null && !film && !still && bench === null) {
+    window.setTimeout(() => void pollMiracle(), 1200);
+    window.setInterval(() => void pollMiracle(), 30_000);
+  }
+
   toMap = () => {
+    fieldGuide.close();
     if (pinned === null) director.toMap();
   };
 
@@ -541,12 +646,84 @@ async function start(): Promise<void> {
     if (pinned === null && !atmosphere.ending) director.press();
   };
   viewPressed = press;
+
+  const automatedRun = film || still || showcasing || bench !== null || quiet;
+  let userInteracted = false;
+
+  const guideCallbacks = {
+    onFollowSpecies: (speciesId: number): void => {
+      if (pinned === null && !atmosphere.ending) director.followSpecies(speciesId);
+    },
+    onChangeSettings: updateSettings,
+    onInvokeMiracle: (): void => {
+      void invokeMiracle(false);
+    },
+  };
+
+  const toggleGuide = (): void => {
+    if (atmosphere.ending) return;
+    const followedSpecies = shot.subject === null ? null : herd.speciesOf(shot.subject);
+    fieldGuide.toggle(followedSpecies !== null && followedSpecies > 0 ? followedSpecies : null);
+    if (fieldGuide.open) void pollMiracle();
+  };
+
   window.addEventListener("keydown", (event) => {
-    if (event.repeat) return;
-    if (event.key === "v" || event.key === " " || event.key === "Enter") press();
+    if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
+    userInteracted = true;
+    keyBar.wake();
+    if (fieldGuide.open) {
+      if (event.key === "Tab") event.preventDefault();
+      fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
+      return;
+    }
+    if (event.key === "Tab" || event.key === "m" || event.key === "M") {
+      if (event.key === "Tab") event.preventDefault();
+      toggleGuide();
+      return;
+    }
+    if (event.key === "g" || event.key === "G") {
+      void invokeMiracle(true);
+      return;
+    }
+    if (event.key === "v" || event.key === "V" || event.key === " " || event.key === "Enter") {
+      press();
+    }
   });
-  // A click or tap is the button too.
-  frame.addEventListener("pointerdown", press);
+
+  let lastPtr = { x: -1, y: -1 };
+  window.addEventListener("pointermove", (event) => {
+    if (Math.hypot(event.clientX - lastPtr.x, event.clientY - lastPtr.y) < 3) return;
+    lastPtr = { x: event.clientX, y: event.clientY };
+    if (!automatedRun) keyBar.wake();
+  });
+
+  // A click or tap steers the key bar, field guide, or steps the camera view.
+  frame.addEventListener("pointerdown", (event) => {
+    userInteracted = true;
+    keyBar.wake();
+    const rect = frame.getBoundingClientRect();
+    const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
+    const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
+    const barHit = keyBar.hitAt(artX, artY);
+    if (barHit !== null) {
+      if (barHit === "guide") toggleGuide();
+      else if (barHit === "view") {
+        fieldGuide.close();
+        press();
+      } else if (barHit === "miracle") {
+        void invokeMiracle(true);
+      } else if (barHit === "close") {
+        fieldGuide.close();
+      } else if (barHit === "tabs") {
+        fieldGuide.handleKey("]", herd.speciesGuide(), settings, guideCallbacks);
+      } else if (barHit === "follow") {
+        fieldGuide.handleKey("Enter", herd.speciesGuide(), settings, guideCallbacks);
+      }
+      return;
+    }
+    if (fieldGuide.handlePointer(artX, artY, settings, guideCallbacks)) return;
+    press();
+  });
 
   let shot: Shot = { view: pinned ?? "map", centre: { x: 0, y: 0 }, dim: 0, subject: null };
   window.__sceneSettled = () => landscape.settled;
@@ -588,6 +765,15 @@ async function start(): Promise<void> {
   };
   window.__advance = (seconds) => {
     advance += seconds;
+  };
+  window.__guide = () => {
+    const snap = herd.speciesGuide();
+    return {
+      open: fieldGuide.open,
+      tab: fieldGuide.tab,
+      species: snap.livingSpeciesCount,
+      totalCreatures: snap.totalCreatures,
+    };
   };
   window.__card = () => card.state;
   if (!KIOSK) {
@@ -864,23 +1050,81 @@ async function start(): Promise<void> {
     const { light, tint, rain } = atmosphere.state;
     sceneLight = light;
     sceneRain = rain;
-    const lamp = lantern(light, tint, atmosphere.ending);
+    const extraNight = automatedRun ? 0 : nightVeilAlpha(sceneLight, settings.nightDimmer);
+    if (nightDim.alpha !== extraNight) nightDim.alpha = extraNight;
+    if (nightDim.visible !== extraNight > 0) nightDim.visible = extraNight > 0;
+
+    const rawLamp = lantern(light, tint, atmosphere.ending);
+    const uiDim = 1 - extraNight * 0.5;
+    const lamp: Rgb =
+      extraNight > 0 ? [rawLamp[0] * uiDim, rawLamp[1] * uiDim, rawLamp[2] * uiDim] : rawLamp;
+
+    if (KIOSK) {
+      const wantCursor = fieldGuide.open ? "default" : "none";
+      if (document.documentElement.style.cursor !== wantCursor) {
+        document.documentElement.style.cursor = wantCursor;
+      }
+    }
+
     PROBE.enter("overlays");
     captions.update(dtS, lamp);
-    // The card is out while the local view follows an animal and is not dipped to dark,
-    // nor away visiting the place of an entry (or on its way back): it would name an
-    // animal off screen.
-    const away = AWAY.has(director.state.motion);
-    // Its portrait is drawn as soon as the animal is chosen, in the dark of the dip (R5,
-    // the optimization plan's Phase 1), over a few frames; the card waits for it, or shows
-    // the animal's last one while it grows into the next.
-    const chosen = shot.view === "local" && shot.subject !== null ? shot.subject : null;
-    const look = chosen === null ? null : herd.portraitOf(chosen);
-    const portrait = look === null ? null : (portraits.of(look) ?? portraits.latestOf(look.id));
-    const following = shot.view === "local" && dark < CARD_DIM && !away ? shot.subject : null;
-    const facts =
-      following === null || (look !== null && portrait === null) ? null : herd.cardOf(following);
-    card.update(dtS, facts === null ? null : { ...facts, portrait }, lamp);
+    if (!settings.showCaptions || fieldGuide.showing) {
+      captions.element.style.display = "none";
+    }
+
+    const guideOpenOrClosing = fieldGuide.open || fieldGuide.showing;
+    const guideSnap = guideOpenOrClosing ? herd.speciesGuide() : null;
+
+    if (guideOpenOrClosing && guideSnap !== null) {
+      card.update(dtS, null, lamp);
+      const repId = fieldGuide.wantedPortraitId(guideSnap);
+      const repLook = repId === null ? null : herd.portraitOf(repId);
+      const repPortrait =
+        repLook === null ? null : (portraits.of(repLook) ?? portraits.latestOf(repLook.id));
+      fieldGuide.update(dtS, {
+        guide: guideSnap,
+        settings,
+        portrait: repPortrait,
+        clock: lastClock,
+        sky: lastSky,
+        lamp,
+      });
+    } else {
+      // The card is out while the local view follows an animal and is not dipped to dark,
+      // nor away visiting the place of an entry (or on its way back): it would name an
+      // animal off screen.
+      const away = AWAY.has(director.state.motion);
+      // Its portrait is drawn as soon as the animal is chosen, in the dark of the dip (R5,
+      // the optimization plan's Phase 1), over a few frames; the card waits for it, or shows
+      // the animal's last one while it grows into the next.
+      const chosen = shot.view === "local" && shot.subject !== null ? shot.subject : null;
+      const look = chosen === null ? null : herd.portraitOf(chosen);
+      const portrait = look === null ? null : (portraits.of(look) ?? portraits.latestOf(look.id));
+      const following = shot.view === "local" && dark < CARD_DIM && !away ? shot.subject : null;
+      const facts =
+        following === null || (look !== null && portrait === null) ? null : herd.cardOf(following);
+      card.update(dtS, facts === null ? null : { ...facts, portrait }, lamp);
+    }
+
+    const scrollNow = captions.state;
+    const scrollShowing =
+      settings.showCaptions && scrollNow.caption !== null && scrollNow.phase !== "gap";
+    const miracleDot =
+      fieldGuide.miracleStatus === null
+        ? undefined
+        : fieldGuide.miracleStatus.ready
+          ? "ready"
+          : "cooldown";
+    const effectiveBarMode = automatedRun && !userInteracted ? "hidden" : settings.keyBarMode;
+    keyBar.update(dtS, {
+      mode: effectiveBarMode,
+      guideOpen: fieldGuide.open,
+      tab: fieldGuide.tab,
+      ...(miracleDot === undefined ? {} : { miracleDot }),
+      scrollShowing,
+      lamp,
+    });
+
     if (showcase !== null && overlay !== null) {
       const { act } = showcase.now;
       overlay.show(act.line, act.title ?? "", showcase.caption, act.top === true);
@@ -923,8 +1167,23 @@ async function start(): Promise<void> {
         meter.frame(performance.now(), index, loop, showcase.time);
       }
     });
-    // The kiosk's cap on the board (R5, ADR 0022): none unless asked.
-    capFrames(app.ticker, Number(params.get("cap") ?? 0));
+    // The kiosk's cap on the board (R5, ADR 0022): configurable live in Smerdino settings.
+    const initialCap =
+      bench !== null
+        ? Number(params.get("cap") ?? 0)
+        : hasSavedSettings
+          ? settings.fpsCap === 60
+            ? 0
+            : 30
+          : urlCap !== null
+            ? Number(urlCap)
+            : KIOSK
+              ? 30
+              : 0;
+    const frameCapper = createFrameCap(app.ticker, initialCap);
+    applyFpsCap = (fps: number) => {
+      frameCapper.set(fps);
+    };
   }
   window.__painting = () => landscape.painting;
 

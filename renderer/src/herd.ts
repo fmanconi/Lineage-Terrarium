@@ -10,10 +10,10 @@
  */
 import type { Container } from "pixi.js";
 import type { Spot } from "./atmosphere/atmosphere";
-import type { CardFacts } from "./card";
+import { describe as describeCard, dietWord, type CardFacts, type IconName } from "./card";
 import { colour, lookOf } from "./creatures/body";
 import { ownColours, speciesColours, type SpeciesColour } from "./creatures/colours";
-import { GENE_NAMES, type Genome } from "./creatures/genome";
+import { GENE_COUNT, GENE_NAMES, geneOf, type Genome } from "./creatures/genome";
 import { parsePhenotypeConfig, phenotype, type PhenotypeConfig } from "./creatures/phenotype";
 import { EGG_BROOD, NEWBORN_S } from "./creatures/nursery";
 import { DYING, Remains, type BodyView, type Cause, type Laid } from "./creatures/remains";
@@ -49,6 +49,54 @@ export interface Casting {
   placed: { slot: number; id: number }[];
   /** Slots of the dead, now free. */
   removed: number[];
+}
+
+/** A species that has lived on the island (`species` messages). */
+export interface SpeciesRecord {
+  id: number;
+  name: string;
+  parent: number | null;
+  extinct: boolean;
+}
+
+/** Live census and anatomical summary of one living species, for the field guide. */
+export interface LivingSpeciesSummary {
+  id: number;
+  name: string;
+  parent: number | null;
+  members: number;
+  young: number;
+  torpid: number;
+  grazing: number;
+  feeding: number;
+  body: number;
+  mark: number;
+  representativeId: number;
+  meanGenome: Genome;
+  traits: string;
+  dietClass: "grazer" | "omnivore" | "hunter";
+  icons: IconName[];
+  rareCounts: { signature: string; name: string; count: number }[];
+  bars: {
+    size: number;
+    diet: number;
+    speed: number;
+    armour: number;
+    aquatic: number;
+    sense: number;
+  };
+}
+
+/** Complete snapshot of island fauna and evolutionary lineage for the field guide. */
+export interface SpeciesGuideSnapshot {
+  totalCreatures: number;
+  livingSpeciesCount: number;
+  extinctSpeciesCount: number;
+  grazers: number;
+  omnivores: number;
+  hunters: number;
+  living: LivingSpeciesSummary[];
+  lineage: (SpeciesRecord & { members: number; body: number | null; mark: number | null })[];
 }
 
 /** Which slot holds which animal, and what the stream has said of each. */
@@ -142,6 +190,7 @@ export class Herd {
   private phenotypeConfig: PhenotypeConfig | null = null;
   private rareConfig: RareConfig = { giant_mass_factor: 1 };
   private signatures: Signatures = new Map();
+  private rareNames = new Map<number, string>();
   /** The rare-gene bits whose look is glow (R4: they shine in the dark). */
   private glowBits = 0;
   /** The "z"s over the animal followed while it sleeps (R5, `creatures/sleep.ts`). */
@@ -339,6 +388,8 @@ export class Herd {
 
   /** Species names by id, from the `species` messages. */
   readonly names = new Map<number, string>();
+  /** Full species phylogeny records by id, from the `species` messages. */
+  readonly speciesRecords = new Map<number, SpeciesRecord>();
   /**
    * Told where each animal that dies was last, and of what if the stream says (R4: the
    * fire's dead leave a puff of ash).
@@ -406,21 +457,29 @@ export class Herd {
     this.subjectsKept = null;
     if (message.type === "fauna") this.takeFauna(message);
     else if (message.type === "rare") {
-      this.signatures = new Map(
-        message.genes
-          .filter((gene) => gene.kingdom === "creature")
-          .map((gene) => [gene.bit, gene.signature]),
-      );
+      const creatureGenes = message.genes.filter((gene) => gene.kingdom === "creature");
+      this.signatures = new Map(creatureGenes.map((gene) => [gene.bit, gene.signature]));
+      this.rareNames = new Map(creatureGenes.map((gene) => [gene.bit, gene.name]));
       this.glowBits = 0;
       for (const [bit, signature] of this.signatures)
         if (signature === "glow") this.glowBits |= bit;
     } else if (message.type === "species") {
-      for (const species of message.species) this.names.set(species.id, species.name);
+      for (const species of message.species) {
+        this.names.set(species.id, species.name);
+        this.speciesRecords.set(species.id, {
+          id: species.id,
+          name: species.name,
+          parent: species.parent,
+          extinct: species.extinct === true,
+        });
+      }
     } else if (message.type === "creatures") this.takeCreatures(message);
     if (message.type === "clock" || message.type === "creatures") this.remains.now = message.t_ms;
     // A new world: nothing of the old one lies on its land.
     if (message.type === "events" && message.events.some(({ kind }) => kind === "world_began")) {
       this.remains.clear();
+      this.names.clear();
+      this.speciesRecords.clear();
     }
   }
 
@@ -730,6 +789,196 @@ export class Herd {
       body: colour(colours.body.hue, colours.body.light, colours.body.saturation),
       mark: colour(colours.mark.hue, colours.mark.light, colours.mark.saturation),
     }));
+  }
+
+  /** Census of all living species and evolutionary phylogeny for the naturalist's field guide. */
+  speciesGuide(): SpeciesGuideSnapshot {
+    const grouped = new Map<number, number[]>();
+    let grazers = 0;
+    let omnivores = 0;
+    let hunters = 0;
+    let totalCreatures = 0;
+
+    for (const id of this.roster.ids) {
+      const known = this.roster.genomes.get(id);
+      if (known === undefined) continue;
+      totalCreatures += 1;
+      const diet = known.genome[this.genomeOrder[1] ?? 1] ?? 0;
+      const kind = dietWord(diet);
+      if (kind === "grazer") grazers += 1;
+      else if (kind === "hunter") hunters += 1;
+      else omnivores += 1;
+
+      const sp = this.roster.species.get(id) ?? 0;
+      const list = grouped.get(sp);
+      if (list === undefined) grouped.set(sp, [id]);
+      else list.push(id);
+    }
+
+    const sortedBits = [...this.signatures].sort(([a], [b]) => a - b);
+    const living: LivingSpeciesSummary[] = [];
+    const colourLookup = new Map<number, { body: number; mark: number }>();
+
+    for (const [id, memberIds] of grouped) {
+      const count = memberIds.length;
+      if (count === 0) continue;
+      const sums = new Array<number>(GENE_COUNT).fill(0);
+      let young = 0;
+      let torpid = 0;
+      let grazing = 0;
+      let feeding = 0;
+      let bestId = memberIds[0] ?? 0;
+      let bestRank = -1;
+      const bitCounts = new Map<number, number>();
+
+      for (const memberId of memberIds) {
+        const known = this.roster.genomes.get(memberId);
+        const isYoung = this.roster.young.has(memberId);
+        const isTorpid = this.roster.torpid.has(memberId);
+        const food = this.roster.food.get(memberId);
+        if (isYoung) young += 1;
+        if (isTorpid) torpid += 1;
+        if (food === "plants") grazing += 1;
+        if (food === "meat") feeding += 1;
+
+        const rank = (isYoung ? 0 : 2) + (isTorpid ? 0 : 1);
+        if (rank > bestRank) {
+          bestRank = rank;
+          bestId = memberId;
+        }
+        if (known !== undefined) {
+          for (let g = 0; g < GENE_COUNT; g++) {
+            const idx = this.genomeOrder[g] ?? g;
+            sums[g] = (sums[g] ?? 0) + (known.genome[idx] ?? 0);
+          }
+          for (const [bit] of sortedBits) {
+            if ((known.slots & bit) !== 0) {
+              bitCounts.set(bit, (bitCounts.get(bit) ?? 0) + 1);
+            }
+          }
+        }
+      }
+
+      const meanGenome: Genome = sums.map((sum) => sum / count);
+      const ranked = this.colours.get(id);
+      const bodyColour =
+        ranked === undefined
+          ? 0x9a7b56
+          : colour(
+              ranked.colours.body.hue,
+              ranked.colours.body.light,
+              ranked.colours.body.saturation,
+            );
+      const markColour =
+        ranked === undefined
+          ? 0x4a3424
+          : colour(
+              ranked.colours.mark.hue,
+              ranked.colours.mark.light,
+              ranked.colours.mark.saturation,
+            );
+      colourLookup.set(id, { body: bodyColour, mark: markColour });
+
+      const rareCounts = sortedBits
+        .map(([bit, signature]) => ({
+          signature,
+          name: this.rareNames.get(bit) ?? signature,
+          count: bitCounts.get(bit) ?? 0,
+        }))
+        .filter((entry) => entry.count > 0);
+
+      const minForBadge = count <= 3 ? 1 : Math.ceil(count * 0.25);
+      const badgeSignatures = rareCounts
+        .filter((entry) => entry.count >= minForBadge)
+        .map((entry) => entry.signature);
+
+      const built =
+        this.phenotypeConfig === null
+          ? { mass: 1, limbPairs: 2 }
+          : phenotype(this.phenotypeConfig, meanGenome);
+      const effectiveMass =
+        built.mass * (badgeSignatures.includes("giant") ? this.rareConfig.giant_mass_factor : 1);
+      const rawName = this.names.get(id) ?? "";
+      const displayName = rawName !== "" ? rawName : id === 0 ? "Newcomers" : `Species ${id}`;
+      const described = describeCard({
+        id: bestId,
+        name: displayName,
+        genome: meanGenome,
+        mass: effectiveMass,
+        limbPairs: built.limbPairs,
+        signatures: badgeSignatures,
+        body: bodyColour,
+        mark: markColour,
+      });
+      const dietVal = geneOf(meanGenome, "DIET");
+      const dietClass = dietWord(dietVal) as "grazer" | "omnivore" | "hunter";
+      const record = this.speciesRecords.get(id);
+
+      living.push({
+        id,
+        name: displayName,
+        parent: record?.parent ?? null,
+        members: count,
+        young,
+        torpid,
+        grazing,
+        feeding,
+        body: bodyColour,
+        mark: markColour,
+        representativeId: bestId,
+        meanGenome,
+        traits: described.traits,
+        dietClass,
+        icons: described.icons,
+        rareCounts,
+        bars: {
+          size: geneOf(meanGenome, "SIZE"),
+          diet: dietVal,
+          speed: geneOf(meanGenome, "SPEED"),
+          armour: geneOf(meanGenome, "ARMOUR"),
+          aquatic: geneOf(meanGenome, "AQUATIC"),
+          sense: geneOf(meanGenome, "SENSE"),
+        },
+      });
+    }
+
+    living.sort((a, b) => b.members - a.members || a.id - b.id);
+
+    const allRecords = new Map<number, SpeciesRecord>(this.speciesRecords);
+    for (const sp of living) {
+      if (sp.id > 0 && !allRecords.has(sp.id)) {
+        allRecords.set(sp.id, { id: sp.id, name: sp.name, parent: sp.parent, extinct: false });
+      }
+    }
+
+    const lineage = [...allRecords.values()]
+      .sort((a, b) => a.id - b.id)
+      .map((rec) => {
+        const members = grouped.get(rec.id)?.length ?? 0;
+        const cols = colourLookup.get(rec.id);
+        return {
+          ...rec,
+          extinct: members === 0 && rec.extinct,
+          members,
+          body: cols?.body ?? null,
+          mark: cols?.mark ?? null,
+        };
+      });
+
+    const namedLivingCount = living.filter((s) => s.id > 0).length;
+    const livingSpeciesCount = namedLivingCount > 0 ? namedLivingCount : living.length;
+    const extinctSpeciesCount = lineage.filter((rec) => rec.members === 0 && rec.extinct).length;
+
+    return {
+      totalCreatures,
+      livingSpeciesCount,
+      extinctSpeciesCount,
+      grazers,
+      omnivores,
+      hunters,
+      living,
+      lineage,
+    };
   }
 
   /** What the name card says of animal `id` (R5, `card.ts`); null if it is not known, or not yet coloured. */

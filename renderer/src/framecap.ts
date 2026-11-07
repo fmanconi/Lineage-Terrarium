@@ -21,23 +21,56 @@ import type { Ticker } from "pixi.js";
  */
 const EARLY_MS = 2;
 
+/** A live frame-rate cap whose target FPS can be changed at runtime (0 = uncapped). */
+export interface FrameCap {
+  readonly fps: number;
+  set(fps: number): number;
+}
+
+/**
+ * Drive `ticker` with a mutable frame-rate cap (`set(30)`, `set(60)`, or `set(0)` for
+ * uncapped browser refresh). Starts its loop once on first positive cap.
+ */
+export function createFrameCap(ticker: Ticker, initialFps: number): FrameCap {
+  let currentFps = Number.isFinite(initialFps) && initialFps > 0 ? initialFps : 0;
+  let started = false;
+  let last = -Infinity;
+
+  const ensureLoop = (): void => {
+    if (started) return;
+    started = true;
+    ticker.autoStart = false;
+    ticker.stop();
+    const loop = (now: number): void => {
+      requestAnimationFrame(loop);
+      if (currentFps > 0) {
+        const intervalMs = 1000 / currentFps;
+        if (now - last < intervalMs - EARLY_MS) return;
+      }
+      last = now;
+      ticker.update(now);
+    };
+    requestAnimationFrame(loop);
+  };
+
+  if (currentFps > 0) ensureLoop();
+
+  return {
+    get fps() {
+      return currentFps;
+    },
+    set(nextFps: number): number {
+      currentFps = Number.isFinite(nextFps) && nextFps > 0 ? nextFps : 0;
+      if (currentFps > 0) ensureLoop();
+      return currentFps;
+    },
+  };
+}
+
 /**
  * Drive `ticker` at no more than `fps` frames a second (0, or anything not a positive
  * number, leaves it alone). Returns the cap in force, 0 for none.
  */
 export function capFrames(ticker: Ticker, fps: number): number {
-  if (!Number.isFinite(fps) || fps <= 0) return 0;
-  const intervalMs = 1000 / fps;
-  // The ticker must not start its own loop again when a listener is added.
-  ticker.autoStart = false;
-  ticker.stop();
-  let last = -Infinity;
-  const loop = (now: number): void => {
-    requestAnimationFrame(loop);
-    if (now - last < intervalMs - EARLY_MS) return;
-    last = now;
-    ticker.update(now);
-  };
-  requestAnimationFrame(loop);
-  return fps;
+  return createFrameCap(ticker, fps).fps;
 }

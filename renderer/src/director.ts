@@ -81,6 +81,13 @@ export const NEXT: Readonly<Record<ViewName, ViewName>> = {
   local: "map",
 };
 
+/** Seconds spent on each view in autonomous documentary tour mode (`autoTour`). */
+export const AUTO_TOUR_S: Readonly<Record<ViewName, number>> = {
+  map: 180,
+  middle: 210,
+  local: 300,
+};
+
 /** An animal the camera may follow: where it is drawn, in cells. */
 export interface Subject {
   id: number;
@@ -144,6 +151,11 @@ export class Director {
    * not for films and stills, whose camera draws its choices when it always did.
    */
   looksAhead = false;
+  /**
+   * Autonomous documentary mode (Smerdino screensaver): gently cycles map → middle → local
+   * instead of resting permanently on the map when idle.
+   */
+  autoTour = false;
   private upcomingId: number | null = null;
   private upcomingAt: Point | null = null;
   /** Where the middle view will come down next, chosen ahead as the animal is (`lookAhead`). */
@@ -186,6 +198,33 @@ export class Director {
     if ((this.going ?? this.view) !== "map") this.go("map");
   }
 
+  /** Dip into the local view following a living member of `speciesId` (from the field guide). */
+  followSpecies(speciesId: number): void {
+    this.idle = 0;
+    this.going = "local";
+    this.cut((scene) => {
+      this.going = null;
+      this.view = "local";
+      this.walking.reset();
+      this.visit = null;
+      this.visited = scene.place?.entry ?? null;
+      this.spring.options = FOLLOWING;
+      this.motion = "follow";
+      const ofSpecies = scene.subjects.filter((s) => s.species === speciesId);
+      const awake = ofSpecies.filter((s) => !s.torpid);
+      const pool = awake.length > 0 ? awake : ofSpecies;
+      const others = pool.filter((s) => s.id !== this.subject);
+      const candidates = others.length > 0 ? others : pool;
+      const next =
+        candidates.length > 0
+          ? (candidates[Math.floor(this.random() * candidates.length)] ?? null)
+          : this.choose(scene, null);
+      this.subject = next?.id ?? null;
+      this.follow = this.followTime();
+      this.spring.snap(next ?? { x: scene.width / 2, y: scene.height / 2 });
+    });
+  }
+
   /** What the camera is doing, for tests and the page's readout. */
   get state(): {
     view: ViewName;
@@ -209,8 +248,15 @@ export class Director {
   /** Move on by `dtS` seconds and say what to show. */
   update(dtS: number, scene: Scene): Shot {
     this.idle += dtS;
-    if (this.view !== "map" && this.idle >= this.timings.idleS && this.going !== "map")
+    if (this.autoTour) {
+      const stayS = AUTO_TOUR_S[this.view];
+      if (this.idle >= stayS && this.dip === null && (scene.place ?? null) === null) {
+        this.idle = 0;
+        this.go(NEXT[this.view]);
+      }
+    } else if (this.view !== "map" && this.idle >= this.timings.idleS && this.going !== "map") {
       this.go("map");
+    }
     this.moveDip(dtS, scene);
     this.film(dtS, scene);
     if (this.looksAhead) this.lookAhead(scene);
