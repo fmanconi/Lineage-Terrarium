@@ -825,18 +825,20 @@ function paintIslandSpread(
     },
     {
       title: "Night Dimmer",
-      value:
-        settings.nightDimmer === "off"
+      value: settings.sleepMode
+        ? "SLEEP ON (N)"
+        : settings.nightDimmer === "off"
           ? "Normal"
           : settings.nightDimmer === "soft"
             ? "Soft Dim"
             : "Dark Room",
-      note:
-        settings.nightDimmer === "off"
-          ? "Standard moonlit blue at night"
+      note: settings.sleepMode
+        ? "Super dark screen now (press N to wake)"
+        : settings.nightDimmer === "off"
+          ? "Standard moonlit blue (press N for sleep)"
           : settings.nightDimmer === "soft"
             ? "Extra dim veil after sunset"
-            : "Deep bedroom dark for sleep",
+            : "Deep bedroom dark after sunset",
     },
     {
       title: "Key Hint Bar",

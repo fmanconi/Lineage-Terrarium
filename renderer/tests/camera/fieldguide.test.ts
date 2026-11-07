@@ -37,6 +37,7 @@ import { mulberry32 } from "../../src/rng";
 import {
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
+  SLEEP_VEIL_ALPHA,
   loadSettings,
   nightVeilAlpha,
   saveSettings,
@@ -174,8 +175,9 @@ describe("Smerdino screensaver settings", () => {
     expect(s.fpsCap).toBe(60);
   });
 
-  it("applies bedroom night veil only when solar light drops below twilight", () => {
+  it("applies bedroom night veil only when solar light drops below twilight, or anytime in sleepMode", () => {
     expect(nightVeilAlpha(1, "dark")).toBe(0);
+    expect(nightVeilAlpha(1, "off", true)).toBe(SLEEP_VEIL_ALPHA);
     expect(nightVeilAlpha(0.5, "dark")).toBe(0);
     expect(nightVeilAlpha(0.05, "off")).toBe(0);
     expect(nightVeilAlpha(0.05, "soft")).toBeCloseTo(0.32, 3);
@@ -256,12 +258,13 @@ describe("Herd speciesGuide census on recorded island", () => {
 
 describe("Bottom-right KeyBar", () => {
   it("paints crisp keycaps and adapts hints to open guide tabs", () => {
-    const closed = hintsForState(false, "species", "ready");
-    expect(closed.map((h) => h.id)).toEqual(["view", "guide", "miracle"]);
+    const closed = hintsForState(false, "species", "ready", true);
+    expect(closed.map((h) => h.id)).toEqual(["view", "guide", "night", "miracle"]);
+    expect(closed.find((h) => h.id === "night")?.dot).toBe("moon-on");
     const painted = paintKeyBar(closed);
-    expect(painted.picture.width).toBeLessThan(220);
+    expect(painted.picture.width).toBeLessThan(260);
     expect(painted.picture.height).toBeLessThan(24);
-    expect(painted.boxes).toHaveLength(3);
+    expect(painted.boxes).toHaveLength(4);
   });
 
   it("auto-hides after 10s of stillness and wakes on activity", () => {

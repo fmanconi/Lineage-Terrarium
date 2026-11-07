@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import datetime as dt
 import logging
 import signal
 import sys
@@ -31,11 +32,21 @@ from lineage_device.fake import FakeDevice, KeyboardDevice
 from lineage_sim.config import parse_config
 
 from lineage_server.island import Island, new_seed
-from lineage_server.server import Server
+from lineage_server.server import Server, SystemClock
 from lineage_server.settings import DEFAULT_SETTINGS, load_settings
 from lineage_server.store import Store
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "default.toml"
+
+
+def _years_ahead_offset_ms(years_ahead: int) -> int:
+    """Exact UTC millisecond offset shifting today's calendar year forward by ``years_ahead``
+    while preserving time-of-day and day/month (+400y = exact 146,097-day Gregorian cycle)."""
+    if years_ahead == 0:
+        return 0
+    base = dt.datetime(2026, 6, 15, 12, 0, 0, tzinfo=dt.UTC)
+    shifted = base.replace(year=base.year + years_ahead)
+    return round((shifted - base).total_seconds() * 1000)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -52,6 +63,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--solar", action="store_true", help="enable real sun solar cycle (Europe/Rome)"
     )
+    parser.add_argument(
+        "--port", type=int, help="override HTTP/WebSocket listen port from server.toml"
+    )
+    parser.add_argument(
+        "--years-ahead",
+        type=int,
+        default=0,
+        help="run the live wall clock shifted N Gregorian years into the future (e.g. 400)",
+    )
     parser.add_argument("--absent", action="store_true", help="the fake starts with no owner")
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -62,6 +82,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.dist is not None and not (args.dist / "index.html").is_file():
         parser.error(f"{args.dist} holds no index.html (cd renderer && npm run build:kiosk)")
     settings = load_settings(args.settings)
+    if args.port is not None:
+        settings = replace(settings, port=args.port)
     config = parse_config(args.config.read_text(encoding="utf-8"))
     if args.solar:
         config = replace(config, presence=replace(config.presence, solar_cycle=True))
@@ -73,7 +95,8 @@ def main(argv: list[str] | None = None) -> None:
         device = FakeDevice(present=not args.absent)
     else:
         device = KeyboardDevice(present=not args.absent)
-    server = Server(island, device, settings, dist=args.dist)
+    wall_clock = SystemClock(_years_ahead_offset_ms(args.years_ahead))
+    server = Server(island, device, settings, dist=args.dist, clock=wall_clock)
 
     async def run() -> None:
         stop = asyncio.Event()

@@ -130,4 +130,13 @@ Opzioni utili:
 - `-LocalUI`: usa la build `renderer/dist-kiosk` locale su Windows collegata allo stream live di Smerdino (attivo anche in automatico finché Smerdino non ha ancora scaricato l'ultimo commit UI);
 - `-ServerHost <ip-o-host>`: specifica manualmente l'indirizzo se diverso da `smerdino.local` / `smerdino`.
 
+### 6. Isola Locale 400 Anni nel Futuro & Pulsante Notte (Sleep Mode)
+- **Pulsante Notte (`[N] Night`)**: premendo `N` sulla tastiera o cliccando il tasto `[N] Night` nella barra in basso a destra, lo schermo attiva un velo notturno super scuro al 90% (`#020206`), abbassa la luce calda di schede e pergamene e nasconde la barra dopo 3 secondi di inattività per non disturbare il sonno in stanza buia (funziona a qualsiasi ora del giorno o della notte). Ripremendo `N` o cliccando `[N] Night` si torna subito alla luminosità normale.
+- **Isola Locale +400 Anni (`2426`)**: per lanciare su Windows una seconda isola autonoma proiettata 400 anni gregoriani avanti (`127.0.0.1:8090`, con 400 anni di deriva tettonica, crateri, vulcani, foreste antiche e specie evolute, mantenendo ora e ciclo solare reale di Pisa):
+  ```powershell
+  # Doppio clic su deploy\Lineage-400-Years.cmd oppure da PowerShell:
+  .\deploy\windows-local-400y.ps1
+  ```
+
+
 

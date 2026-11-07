@@ -22,6 +22,7 @@ import type { KeyBarMode } from "./settings";
 
 /** Seconds the bar stays out after activity in `"auto"` mode, and slide duration. */
 export const KEYBAR_IDLE_S = 10;
+export const KEYBAR_SLEEP_IDLE_S = 3;
 export const KEYBAR_SLIDE_S = 0.35;
 
 /** Colours matching `card.ts`. */
@@ -37,6 +38,10 @@ const WORD_INK = 0x4a2c26;
 const READY_DOT = 0x6fb03a;
 const READY_DOT_LIT = 0xc8e88a;
 const COOLDOWN_DOT = 0xb59e78;
+const MOON_OFF = 0x7a6855;
+const MOON_ON = 0xe8b44c;
+
+const MOON_BITMAP = ["..##.", ".##..", ".##..", ".##..", "..##."] as const;
 
 /** Pixel arrow glyphs (11x7) for keycaps so no character outside `pixelfont.ts` is needed. */
 export const ARROW_BITMAPS = {
@@ -67,8 +72,8 @@ export interface KeyHint {
   id: string;
   key: KeyGlyph;
   label: string;
-  /** Optional status gem beside the label ("ready" green/gold, "cooldown" muted). */
-  dot?: "ready" | "cooldown";
+  /** Optional status gem or crescent moon beside the label. */
+  dot?: "ready" | "cooldown" | "moon-off" | "moon-on";
 }
 
 export type GuideTab = "species" | "lineage" | "island";
@@ -78,11 +83,18 @@ export function hintsForState(
   guideOpen: boolean,
   tab: GuideTab,
   miracleDot?: "ready" | "cooldown",
+  sleepMode = false,
 ): KeyHint[] {
   if (!guideOpen) {
     return [
       { id: "view", key: { kind: "text", text: "V" }, label: "View" },
       { id: "guide", key: { kind: "text", text: "Tab" }, label: "Guide" },
+      {
+        id: "night",
+        key: { kind: "text", text: "N" },
+        label: "Night",
+        dot: sleepMode ? "moon-on" : "moon-off",
+      },
       {
         id: "miracle",
         key: { kind: "text", text: "G" },
@@ -184,7 +196,9 @@ export function paintKeycap(
 
 function hintWidth(hint: KeyHint): number {
   const base = keycapWidth(hint.key) + LABEL_GAP + measure(hint.label);
-  return hint.dot === undefined ? base : base + DOT_GAP + DOT_SIZE;
+  if (hint.dot === undefined) return base;
+  const iconW = hint.dot === "moon-off" || hint.dot === "moon-on" ? 5 : DOT_SIZE;
+  return base + DOT_GAP + iconW;
 }
 
 /** Size of the painted key hint strip in art pixels, shadow included. */
@@ -239,17 +253,28 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
     cursor += draw(hint.label, cursor, top + 2, (px, py) => put(px, py, WORD_INK));
     if (hint.dot !== undefined) {
       cursor += DOT_GAP;
-      const dy = top + 4;
-      const fill = hint.dot === "ready" ? READY_DOT : COOLDOWN_DOT;
-      for (let r = 0; r < DOT_SIZE; r++) {
-        for (let c = 0; c < DOT_SIZE; c++) {
-          const corner = (r === 0 || r === DOT_SIZE - 1) && (c === 0 || c === DOT_SIZE - 1);
-          if (corner) continue;
-          const lit = hint.dot === "ready" && r === 1 && c === 1;
-          put(cursor + c, dy + r, lit ? READY_DOT_LIT : fill);
+      if (hint.dot === "moon-off" || hint.dot === "moon-on") {
+        const moonCol = hint.dot === "moon-on" ? MOON_ON : MOON_OFF;
+        const my = top + 3;
+        MOON_BITMAP.forEach((row, r) => {
+          [...row].forEach((ch, c) => {
+            if (ch === "#") put(cursor + c, my + r, moonCol);
+          });
+        });
+        cursor += 5;
+      } else {
+        const dy = top + 4;
+        const fill = hint.dot === "ready" ? READY_DOT : COOLDOWN_DOT;
+        for (let r = 0; r < DOT_SIZE; r++) {
+          for (let c = 0; c < DOT_SIZE; c++) {
+            const corner = (r === 0 || r === DOT_SIZE - 1) && (c === 0 || c === DOT_SIZE - 1);
+            if (corner) continue;
+            const lit = hint.dot === "ready" && r === 1 && c === 1;
+            put(cursor + c, dy + r, lit ? READY_DOT_LIT : fill);
+          }
         }
+        cursor += DOT_SIZE;
       }
-      cursor += DOT_SIZE;
     }
     boxes.push({ id: hint.id, x0: startX, x1: cursor });
     cursor += ITEM_GAP;
@@ -319,18 +344,28 @@ export class KeyBar {
       guideOpen: boolean;
       tab: GuideTab;
       miracleDot?: "ready" | "cooldown";
+      sleepMode?: boolean;
       scrollShowing: boolean;
       lamp?: Rgb;
     },
   ): void {
     this.idleS += dtS;
-    const { mode, guideOpen, tab, miracleDot, scrollShowing, lamp = DAYLIGHT } = options;
+    const {
+      mode,
+      guideOpen,
+      tab,
+      miracleDot,
+      sleepMode = false,
+      scrollShowing,
+      lamp = DAYLIGHT,
+    } = options;
+    const idleLimit = sleepMode ? KEYBAR_SLEEP_IDLE_S : KEYBAR_IDLE_S;
     const shouldShow =
       mode === "hidden"
         ? false
         : guideOpen
           ? true
-          : !scrollShowing && (mode === "always" || this.idleS < KEYBAR_IDLE_S);
+          : !scrollShowing && (mode === "always" || this.idleS < idleLimit);
 
     if (shouldShow) {
       this.progress = Math.min(1, this.progress + dtS / KEYBAR_SLIDE_S);
@@ -345,7 +380,7 @@ export class KeyBar {
       return;
     }
 
-    const hints = hintsForState(guideOpen, tab, miracleDot);
+    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode);
     const key = JSON.stringify([hints, lampKey(lamp)]);
     const share = (v: number, total: number): string => `${(100 * v) / total}%`;
 

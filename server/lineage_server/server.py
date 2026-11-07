@@ -55,8 +55,11 @@ class WallClock(Protocol):
 
 
 class SystemClock:
+    def __init__(self, offset_ms: int = 0) -> None:
+        self._offset_ms = int(offset_ms)
+
     def now_ms(self) -> int:
-        return time.time_ns() // 1_000_000
+        return time.time_ns() // 1_000_000 + self._offset_ms
 
 
 def is_loopback(connection: ServerConnection) -> bool:

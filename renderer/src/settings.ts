@@ -12,6 +12,8 @@ export interface SmerdinoSettings {
   autoTour: boolean;
   /** Extra bedroom night-darkening veil when solar light falls low. */
   nightDimmer: NightDimmer;
+  /** Instant super-dark bedroom sleep mode (`N` / Night button), active at any hour. */
+  sleepMode: boolean;
   /** Whether notable chronicle scrolls unroll at the foot of the screen. */
   showCaptions: boolean;
   /** Bottom-right key hint strip visibility mode. */
@@ -22,9 +24,13 @@ export interface SmerdinoSettings {
 
 export const SETTINGS_STORAGE_KEY = "lineage_smerdino_settings_v1";
 
+/** Veil alpha (0–1) when the manual Sleep / Night button is active: 90% super-dark for sleeping. */
+export const SLEEP_VEIL_ALPHA = 0.9;
+
 export const DEFAULT_SETTINGS: Readonly<SmerdinoSettings> = {
   autoTour: false,
   nightDimmer: "off",
+  sleepMode: false,
   showCaptions: true,
   keyBarMode: "auto",
   fpsCap: 30,
@@ -64,6 +70,8 @@ export function loadSettings(storage: StorageLike | null = browserStorage()): Sm
       autoTour:
         typeof parsed["autoTour"] === "boolean" ? parsed["autoTour"] : DEFAULT_SETTINGS.autoTour,
       nightDimmer,
+      sleepMode:
+        typeof parsed["sleepMode"] === "boolean" ? parsed["sleepMode"] : DEFAULT_SETTINGS.sleepMode,
       showCaptions:
         typeof parsed["showCaptions"] === "boolean"
           ? parsed["showCaptions"]
@@ -90,10 +98,12 @@ export function saveSettings(
 }
 
 /**
- * Extra darkening alpha (0–0.6) laid over the scene at dusk/night when bedroom dimmer is
- * active. Smoothly ramps in only once island light drops below 0.45, leaving daytime crisp.
+ * Extra darkening alpha (0–0.9) laid over the scene. When manual `sleepMode` is active,
+ * immediately returns `SLEEP_VEIL_ALPHA` (0.9) regardless of daytime; otherwise smoothly
+ * ramps in only once island light drops below 0.45.
  */
-export function nightVeilAlpha(light: number, mode: NightDimmer): number {
+export function nightVeilAlpha(light: number, mode: NightDimmer, sleepMode = false): number {
+  if (sleepMode) return SLEEP_VEIL_ALPHA;
   if (mode === "off") return 0;
   const ceiling = mode === "dark" ? 0.58 : 0.32;
   const threshold = 0.45;
@@ -114,9 +124,13 @@ export function stepSetting(
   if (index === 0) {
     next.autoTour = !current.autoTour;
   } else if (index === 1) {
-    const at = NIGHT_DIMMERS.indexOf(current.nightDimmer);
-    const moved = (at + delta + NIGHT_DIMMERS.length) % NIGHT_DIMMERS.length;
-    next.nightDimmer = NIGHT_DIMMERS[moved] ?? "off";
+    if (current.sleepMode) {
+      next.sleepMode = false;
+    } else {
+      const at = NIGHT_DIMMERS.indexOf(current.nightDimmer);
+      const moved = (at + delta + NIGHT_DIMMERS.length) % NIGHT_DIMMERS.length;
+      next.nightDimmer = NIGHT_DIMMERS[moved] ?? "off";
+    }
   } else if (index === 2) {
     const at = KEYBAR_MODES.indexOf(current.keyBarMode);
     const moved = (at + delta + KEYBAR_MODES.length) % KEYBAR_MODES.length;

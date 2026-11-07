@@ -19,6 +19,7 @@ renderer/playwright-report/
 
 # Raw fast-forward output (only reports/ is committed, see CLAUDE.md §7)
 runs/
+data/
 
 # Editors / OS
 .vscode/

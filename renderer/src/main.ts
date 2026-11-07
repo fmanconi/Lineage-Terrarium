@@ -681,10 +681,19 @@ async function start(): Promise<void> {
     if (fieldGuide.open) void pollMiracle();
   };
 
+  const toggleSleep = (): void => {
+    updateSettings({ ...settings, sleepMode: !settings.sleepMode });
+    if (settings.sleepMode && fieldGuide.open) fieldGuide.close();
+  };
+
   window.addEventListener("keydown", (event) => {
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     userInteracted = true;
     keyBar.wake();
+    if (event.key === "n" || event.key === "N") {
+      toggleSleep();
+      return;
+    }
     if (fieldGuide.open) {
       if (event.key === "Tab") event.preventDefault();
       fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
@@ -721,6 +730,7 @@ async function start(): Promise<void> {
     const barHit = keyBar.hitAt(artX, artY);
     if (barHit !== null) {
       if (barHit === "guide") toggleGuide();
+      else if (barHit === "night") toggleSleep();
       else if (barHit === "view") {
         fieldGuide.close();
         press();
@@ -739,6 +749,7 @@ async function start(): Promise<void> {
     press();
   });
 
+  let currentNightAlpha = settings.sleepMode ? nightVeilAlpha(1, settings.nightDimmer, true) : 0;
   let shot: Shot = { view: pinned ?? "map", centre: { x: 0, y: 0 }, dim: 0, subject: null };
   window.__sceneSettled = () => landscape.settled;
   window.__receive = receive;
@@ -1064,14 +1075,36 @@ async function start(): Promise<void> {
     const { light, tint, rain } = atmosphere.state;
     sceneLight = light;
     sceneRain = rain;
-    const extraNight = automatedRun ? 0 : nightVeilAlpha(sceneLight, settings.nightDimmer);
-    if (nightDim.alpha !== extraNight) nightDim.alpha = extraNight;
-    if (nightDim.visible !== extraNight > 0) nightDim.visible = extraNight > 0;
+    const targetNight = automatedRun
+      ? 0
+      : nightVeilAlpha(sceneLight, settings.nightDimmer, settings.sleepMode);
+    if (still || film) {
+      currentNightAlpha = targetNight;
+    } else if (currentNightAlpha < targetNight) {
+      currentNightAlpha = Math.min(targetNight, currentNightAlpha + dtS * 2.6);
+    } else if (currentNightAlpha > targetNight) {
+      currentNightAlpha = Math.max(targetNight, currentNightAlpha - dtS * 2.6);
+    }
+    const wantTint = settings.sleepMode || currentNightAlpha > 0.6 ? 0x020206 : DIP_COLOUR;
+    if (nightDim.tint !== wantTint) nightDim.tint = wantTint;
+    if (nightDim.alpha !== currentNightAlpha) nightDim.alpha = currentNightAlpha;
+    if (nightDim.visible !== currentNightAlpha > 0) nightDim.visible = currentNightAlpha > 0;
 
     const rawLamp = lantern(light, tint, atmosphere.ending);
-    const uiDim = 1 - extraNight * 0.5;
     const lamp: Rgb =
-      extraNight > 0 ? [rawLamp[0] * uiDim, rawLamp[1] * uiDim, rawLamp[2] * uiDim] : rawLamp;
+      currentNightAlpha > 0.65
+        ? [
+            rawLamp[0] * (1 - currentNightAlpha * 0.8),
+            rawLamp[1] * (1 - currentNightAlpha * 0.84),
+            rawLamp[2] * (1 - currentNightAlpha * 0.88),
+          ]
+        : currentNightAlpha > 0
+          ? [
+              rawLamp[0] * (1 - currentNightAlpha * 0.5),
+              rawLamp[1] * (1 - currentNightAlpha * 0.5),
+              rawLamp[2] * (1 - currentNightAlpha * 0.5),
+            ]
+          : rawLamp;
 
     if (KIOSK && !desktop) {
       const wantCursor = fieldGuide.open ? "default" : "none";
@@ -1135,6 +1168,7 @@ async function start(): Promise<void> {
       guideOpen: fieldGuide.open,
       tab: fieldGuide.tab,
       ...(miracleDot === undefined ? {} : { miracleDot }),
+      sleepMode: settings.sleepMode,
       scrollShowing,
       lamp,
     });
