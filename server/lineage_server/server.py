@@ -70,6 +70,17 @@ def is_loopback(connection: ServerConnection) -> bool:
         return False
 
 
+def is_local_network(connection: ServerConnection) -> bool:
+    """Whether the client is on loopback, private home LAN, or Tailscale CGNAT."""
+    address = connection.remote_address
+    if not address:
+        return False
+    try:
+        return not ipaddress.ip_address(str(address[0])).is_global
+    except ValueError:
+        return False
+
+
 @dataclass
 class _Client:
     connection: ServerConnection
@@ -234,12 +245,17 @@ class Server:
                 HTTPStatus.SERVICE_UNAVAILABLE, b'{"ready":false}', "application/json"
             )
         method = getattr(request, "method", "GET").upper()
+        if method == "OPTIONS":
+            return _response(HTTPStatus.NO_CONTENT, b"", "text/plain")
         if method == "GET":
             async with self._lock:
                 data = await self._in_sim(self.island.miracle_status)
             return _response(HTTPStatus.OK, json.dumps(data).encode(), "application/json")
         if method == "POST":
-            if not self.is_desk(connection):
+            allowed = self.is_desk(connection) or (
+                self.is_desk is is_loopback and is_local_network(connection)
+            )
+            if not allowed:
                 return _response(
                     HTTPStatus.FORBIDDEN, b'{"error":"desk_only"}', "application/json"
                 )
@@ -332,6 +348,8 @@ class Server:
 def _response(status: HTTPStatus, body: bytes, kind: str) -> Response:
     headers = Headers([("Content-Type", kind), ("Content-Length", str(len(body)))])
     headers["Cache-Control"] = "no-cache"
+    headers["Access-Control-Allow-Origin"] = "*"
+    headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return Response(status.value, status.phrase, headers, body)
 
 

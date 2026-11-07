@@ -175,6 +175,18 @@ function serverStream(): string {
   return `${scheme}://${window.location.host}/stream`;
 }
 
+/** Derive the HTTP `/god-power` endpoint matching `socketUrl` (supports remote `?source=`). */
+function miracleUrlOf(socketUrl: string | null): string | null {
+  if (socketUrl === null) return null;
+  try {
+    const parsed = new URL(socketUrl, window.location.href);
+    const scheme = parsed.protocol === "wss:" ? "https:" : "http:";
+    return `${scheme}//${parsed.host}/god-power`;
+  } catch {
+    return "/god-power";
+  }
+}
+
 declare global {
   interface Window {
     /** True once the view shows the latest day, fully painted (the visual tests wait for it). */
@@ -276,6 +288,7 @@ async function start(): Promise<void> {
   // The showcase (R5): a scripted tour of the scene on a recording, kept in the desk's
   // build so that it runs on the board as the desk would (`showcase/`).
   const showcasing = params.get("showcase") !== null;
+  const desktop = params.get("desktop") !== null;
 
   const app = new Application();
   await app.init({
@@ -295,7 +308,7 @@ async function start(): Promise<void> {
   frame.style.overflow = "hidden";
   document.body.appendChild(frame);
   // No pointer on the desk (the owner, on the board: the kiosk showed it).
-  if (KIOSK) document.documentElement.style.cursor = "none";
+  if (KIOSK && !desktop) document.documentElement.style.cursor = "none";
   const canvas = app.canvas;
   canvas.style.imageRendering = "pixelated";
   canvas.style.position = "absolute";
@@ -566,8 +579,8 @@ async function start(): Promise<void> {
   })();
   let settings: SmerdinoSettings = loadSettings();
   const urlCap = params.get("cap");
-  if (!hasSavedSettings && urlCap !== null) {
-    settings = { ...settings, fpsCap: Number(urlCap) >= 60 ? 60 : 30 };
+  if (!hasSavedSettings && (urlCap !== null || desktop)) {
+    settings = { ...settings, fpsCap: urlCap !== null ? (Number(urlCap) >= 60 ? 60 : 30) : 60 };
   }
   director.autoTour =
     pinned === null && !film && !still && !showcasing && bench === null && settings.autoTour;
@@ -584,10 +597,11 @@ async function start(): Promise<void> {
   };
 
   // Live server `/god-power` status polling and weekly miracle invocation.
+  const miracleUrl = miracleUrlOf(socket);
   const pollMiracle = async (): Promise<void> => {
-    if (socket === null) return;
+    if (miracleUrl === null) return;
     try {
-      const resp = await fetch("/god-power", { cache: "no-store" });
+      const resp = await fetch(miracleUrl, { cache: "no-store" });
       if (!resp.ok) return;
       const data = (await resp.json()) as MiracleStatus;
       fieldGuide.setMiracleStatus(data);
@@ -599,7 +613,7 @@ async function start(): Promise<void> {
   let invokingMiracle = false;
   const invokeMiracle = async (fromShortcut = false): Promise<void> => {
     if (invokingMiracle) return;
-    if (socket === null) {
+    if (miracleUrl === null) {
       if (fromShortcut && !fieldGuide.open && !atmosphere.ending) {
         fieldGuide.setTab("island");
         fieldGuide.toggle();
@@ -608,7 +622,7 @@ async function start(): Promise<void> {
     }
     invokingMiracle = true;
     try {
-      const resp = await fetch("/god-power", { method: "POST" });
+      const resp = await fetch(miracleUrl, { method: "POST" });
       const data = (await resp.json()) as MiracleStatus & {
         invoked?: boolean;
         power?: string | null;
@@ -1059,7 +1073,7 @@ async function start(): Promise<void> {
     const lamp: Rgb =
       extraNight > 0 ? [rawLamp[0] * uiDim, rawLamp[1] * uiDim, rawLamp[2] * uiDim] : rawLamp;
 
-    if (KIOSK) {
+    if (KIOSK && !desktop) {
       const wantCursor = fieldGuide.open ? "default" : "none";
       if (document.documentElement.style.cursor !== wantCursor) {
         document.documentElement.style.cursor = wantCursor;
@@ -1176,8 +1190,10 @@ async function start(): Promise<void> {
             ? 0
             : 30
           : urlCap !== null
-            ? Number(urlCap)
-            : KIOSK
+            ? Number(urlCap) >= 60
+              ? 0
+              : Number(urlCap)
+            : KIOSK && !desktop
               ? 30
               : 0;
     const frameCapper = createFrameCap(app.ticker, initialCap);

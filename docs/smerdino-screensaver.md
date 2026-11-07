@@ -117,3 +117,17 @@ chmod +x deploy/smerdino-update.sh
 ./deploy/smerdino-update.sh
 ```
 
+### 5. Finestra Sincronizzata in Tempo Reale su Windows
+Il server su Smerdino ascolta sulla rete locale (`smerdino.local:8080`) e su Tailscale (`smerdino:8080`), trasmettendo in diretta lo stesso identico mondo via WebSocket (`/stream`). Puoi aprire una finestra pixel-art senza bordi su Windows, sincronizzata tick-per-tick con Smerdino ma con telecamera, diario delle specie (`Tab` / `M`) e impostazioni indipendenti:
+
+```powershell
+# Doppio clic su deploy\Lineage-Smerdino-Sync.cmd oppure da PowerShell:
+.\deploy\windows-sync.ps1
+```
+
+Opzioni utili:
+- `-Fullscreen`: avvia la finestra a schermo intero;
+- `-LocalUI`: usa la build `renderer/dist-kiosk` locale su Windows collegata allo stream live di Smerdino (attivo anche in automatico finché Smerdino non ha ancora scaricato l'ultimo commit UI);
+- `-ServerHost <ip-o-host>`: specifica manualmente l'indirizzo se diverso da `smerdino.local` / `smerdino`.
+
+
