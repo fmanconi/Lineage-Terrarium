@@ -348,7 +348,18 @@ export function drive(
   const pace = walker.pace * (motion.mode === "stroll" ? stroll : hurry);
   // Walk the way it faces, slowing while it still faces away from its goal.
   const facing = Math.max(0, Math.cos(toward - walker.heading));
-  const stride = Math.min(pace * dtS * (0.25 + 0.75 * facing), left);
+  // And slowing as a near place comes round to its side: at a full pace the circle its
+  // turning allows (pace / TURN_RATE) can be wider than the way there, and it would circle
+  // the place for ever instead of reaching it (measured 08/11/2026: at 2 cells a second a
+  // place 0.6 cells off to the side was circled three times in ten seconds, never reached).
+  // The pace is held to the one whose tightest circle still passes through the place.
+  const off = Math.abs(
+    Math.atan2(Math.sin(toward - walker.heading), Math.cos(toward - walker.heading)),
+  );
+  const near = Math.hypot(dx, dy);
+  const room = off >= Math.PI / 2 ? near / 2 : near / (2 * Math.max(Math.sin(off), 1e-6));
+  const turnable = Math.min(pace, TURN_RATE * room);
+  const stride = Math.min(turnable * dtS * (0.25 + 0.75 * facing), left);
   const x = head.x + Math.cos(walker.heading) * stride;
   const y = head.y + Math.sin(walker.heading) * stride;
   // A stroll stops at what it cannot cross; going to where the sim has it never does.
