@@ -46,16 +46,19 @@ describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
     expect(isXlScaleActive()).toBe(false);
   });
 
-  it("cycles the zoom 1x → 2x → 3x → 1x", () => {
+  it("cycles the zoom 1x → 2x → 3x → 4x → 1x", () => {
     expect(cycleZoom(1)).toBe(2);
     expect(cycleZoom(2)).toBe(3);
-    expect(cycleZoom(3)).toBe(1);
+    expect(cycleZoom(3)).toBe(4);
+    expect(cycleZoom(4)).toBe(1);
   });
 
-  it("steps the zoom with the wheel, within 1x and 3x", () => {
+  it("steps the zoom with the wheel, within 1x and 4x", () => {
     expect(stepZoom(1, -100)).toBe(2);
     expect(stepZoom(2, -100)).toBe(3);
-    expect(stepZoom(3, -100)).toBe(3);
+    expect(stepZoom(3, -100)).toBe(4);
+    expect(stepZoom(4, -100)).toBe(4);
+    expect(stepZoom(4, 100)).toBe(3);
     expect(stepZoom(3, 100)).toBe(2);
     expect(stepZoom(2, 100)).toBe(1);
     expect(stepZoom(1, 100)).toBe(1);
@@ -68,6 +71,8 @@ describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
     expect(mod.macroZoomFor("local")).toBe(2);
     expect(mod.onKey(key("Z"))).toBe(true);
     expect(mod.macroZoomFor("local")).toBe(3);
+    expect(mod.onKey(key("z"))).toBe(true);
+    expect(mod.macroZoomFor("local")).toBe(4);
     expect(mod.onKey(key("z"))).toBe(true);
     expect(mod.macroZoomFor("local")).toBe(1);
     expect(mod.onKey(key("x"))).toBe(false);
@@ -95,9 +100,12 @@ describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
     const mod = modIn("local");
     expect(mod.onWheel(-120, "local")).toBe(true);
     expect(mod.onWheel(-120, "local")).toBe(true);
-    expect(mod.macroZoomFor("local")).toBe(3);
+    expect(mod.onWheel(-120, "local")).toBe(true);
+    expect(mod.macroZoomFor("local")).toBe(4);
     expect(mod.onWheel(120, "middle")).toBe(false);
     expect(mod.onWheel(0, "local")).toBe(false);
+    expect(mod.onWheel(120, "local")).toBe(true);
+    expect(mod.macroZoomFor("local")).toBe(3);
     expect(mod.onWheel(120, "local")).toBe(true);
     expect(mod.macroZoomFor("local")).toBe(2);
   });
@@ -107,9 +115,10 @@ describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
     const first = modIn("local", storage);
     first.onKey(key("z"));
     first.onKey(key("z"));
-    expect(storage.getItem(XL_SCALE_STORAGE_KEY)).toBe("3");
+    first.onKey(key("z"));
+    expect(storage.getItem(XL_SCALE_STORAGE_KEY)).toBe("4");
     const second = modIn("local", storage);
-    expect(second.macroZoomLevel).toBe(3);
+    expect(second.macroZoomLevel).toBe(4);
   });
 
   it("starts at 1x from a missing or unreadable stored level", () => {

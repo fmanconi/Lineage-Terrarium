@@ -1455,7 +1455,7 @@ async function start(): Promise<void> {
       // the light of the moment (0 night, 1 day)
       land: landscape.current,
       view: shot.view,
-      tile: TILES[shot.view],
+      tile: scale,
       light: atmoState.light,
     };
     mods.dispatchUpdate(dtS, modOptions);

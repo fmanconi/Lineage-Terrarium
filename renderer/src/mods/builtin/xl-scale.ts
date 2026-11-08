@@ -2,7 +2,7 @@
  * Terrarium XL: Macro Zoom & Apex Ecology Mod (ADR 0024):
  *
  * 1. Macro zoom: in the local view (the animal followed), `Z` or the mouse wheel brings the
- *    camera in to 2× and 3×, centred on the shot's middle, so that the smallest animals can
+ *    camera in to 2×, 3× and 4×, centred on the shot's middle, so that the smallest animals can
  *    be seen pixel by pixel. `main.ts` reads the level (`macroZoomFor`) and scales the
  *    world by it; the art itself is not redrawn, only magnified.
  * 2. Ecological scale: the field guide gives each species a size class in centimetres and
@@ -17,7 +17,7 @@
 import type { StorageLike } from "../../settings";
 import type { Mod, ModContext, ModMetadata } from "../types";
 
-export type MacroZoomLevel = 1 | 2 | 3;
+export type MacroZoomLevel = 1 | 2 | 3 | 4;
 
 /** Where the zoom level is kept between runs. */
 export const XL_SCALE_STORAGE_KEY = "lineage_xl_scale_zoom_v1";
@@ -37,15 +37,15 @@ export function isXlScaleActive(): boolean {
   return xlScaleActive;
 }
 
-/** The next level when `Z` is pressed: 1× → 2× → 3× → 1×. */
+/** The next level when `Z` is pressed: 1× → 2× → 3× → 4× → 1×. */
 export function cycleZoom(level: MacroZoomLevel): MacroZoomLevel {
-  return level === 1 ? 2 : level === 2 ? 3 : 1;
+  return level === 1 ? 2 : level === 2 ? 3 : level === 3 ? 4 : 1;
 }
 
-/** One wheel notch: forward (`deltaY < 0`) zooms in up to 3×, back zooms out down to 1×. */
+/** One wheel notch: forward (`deltaY < 0`) zooms in up to 4×, back zooms out down to 1×. */
 export function stepZoom(level: MacroZoomLevel, deltaY: number): MacroZoomLevel {
-  if (deltaY < 0) return level === 1 ? 2 : 3;
-  if (deltaY > 0) return level === 3 ? 2 : 1;
+  if (deltaY < 0) return level === 1 ? 2 : level === 2 ? 3 : 4;
+  if (deltaY > 0) return level === 4 ? 3 : level === 3 ? 2 : 1;
   return level;
 }
 
@@ -58,7 +58,7 @@ export function formatMetricSize(mass: number): string {
 }
 
 function parseLevel(raw: string | null): MacroZoomLevel {
-  return raw === "2" ? 2 : raw === "3" ? 3 : 1;
+  return raw === "2" ? 2 : raw === "3" ? 3 : raw === "4" ? 4 : 1;
 }
 
 export class XlScaleMod implements Mod {
