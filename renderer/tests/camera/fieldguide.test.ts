@@ -36,6 +36,7 @@ import type { ClockMessage, Message } from "../../src/protocol";
 import { mulberry32 } from "../../src/rng";
 import {
   DEFAULT_SETTINGS,
+  LEGACY_SETTINGS_STORAGE_KEY,
   SETTINGS_STORAGE_KEY,
   SLEEP_VEIL_ALPHA,
   loadSettings,
@@ -139,7 +140,7 @@ function sampleGuide(): SpeciesGuideSnapshot {
   };
 }
 
-describe("Smerdino screensaver settings", () => {
+describe("Terrarium screensaver settings", () => {
   it("persists and validates settings, falling back safely on corrupt JSON", () => {
     const store = memoryStorage();
     expect(loadSettings(store)).toEqual(DEFAULT_SETTINGS);
@@ -154,6 +155,17 @@ describe("Smerdino screensaver settings", () => {
     expect(loadSettings(store)).toEqual(custom);
 
     store.setItem(SETTINGS_STORAGE_KEY, "{not-valid-json");
+    expect(loadSettings(store)).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("reads settings saved under the pre-Terrarium key when the new key is empty", () => {
+    const store = memoryStorage();
+    const legacy = { ...DEFAULT_SETTINGS, sleepMode: true, keyBarMode: "hidden" as const };
+    store.setItem(LEGACY_SETTINGS_STORAGE_KEY, JSON.stringify(legacy));
+    expect(loadSettings(store)).toEqual(legacy);
+
+    saveSettings(DEFAULT_SETTINGS, store);
+    expect(store.getItem(SETTINGS_STORAGE_KEY)).not.toBeNull();
     expect(loadSettings(store)).toEqual(DEFAULT_SETTINGS);
   });
 

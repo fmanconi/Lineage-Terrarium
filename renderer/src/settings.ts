@@ -1,13 +1,13 @@
 /**
- * Smerdino screensaver preferences (persisted locally in the browser, never altering the
- * 1:1 sacred simulation clock).
+ * Lineage: Terrarium screensaver preferences (persisted locally in the browser, never
+ * altering the 1:1 sacred simulation clock).
  */
 
 export type NightDimmer = "off" | "soft" | "dark";
 export type KeyBarMode = "auto" | "always" | "hidden";
 export type FpsSetting = 30 | 60;
 
-export interface SmerdinoSettings {
+export interface TerrariumSettings {
   /** Autonomous documentary camera cycling (map -> middle -> local) vs resting on map. */
   autoTour: boolean;
   /** Extra bedroom night-darkening veil when solar light falls low. */
@@ -22,12 +22,18 @@ export interface SmerdinoSettings {
   fpsCap: FpsSetting;
 }
 
-export const SETTINGS_STORAGE_KEY = "lineage_smerdino_settings_v1";
+/** Kept for backward compatibility: the settings were named after the fork's first host. */
+export type SmerdinoSettings = TerrariumSettings;
+
+export const SETTINGS_STORAGE_KEY = "lineage_terrarium_settings_v1";
+
+/** The key used before the fork was named Terrarium (ADR 0025); read when the new one is empty. */
+export const LEGACY_SETTINGS_STORAGE_KEY = "lineage_smerdino_settings_v1";
 
 /** Veil alpha (0–1) when the manual Sleep / Night button is active: 90% super-dark for sleeping. */
 export const SLEEP_VEIL_ALPHA = 0.9;
 
-export const DEFAULT_SETTINGS: Readonly<SmerdinoSettings> = {
+export const DEFAULT_SETTINGS: Readonly<TerrariumSettings> = {
   autoTour: false,
   nightDimmer: "off",
   sleepMode: false,
@@ -54,10 +60,11 @@ const NIGHT_DIMMERS: readonly NightDimmer[] = ["off", "soft", "dark"];
 const KEYBAR_MODES: readonly KeyBarMode[] = ["auto", "always", "hidden"];
 
 /** Load validated settings from storage, falling back to defaults on missing/invalid fields. */
-export function loadSettings(storage: StorageLike | null = browserStorage()): SmerdinoSettings {
+export function loadSettings(storage: StorageLike | null = browserStorage()): TerrariumSettings {
   if (storage === null) return { ...DEFAULT_SETTINGS };
   try {
-    const raw = storage.getItem(SETTINGS_STORAGE_KEY);
+    const raw =
+      storage.getItem(SETTINGS_STORAGE_KEY) ?? storage.getItem(LEGACY_SETTINGS_STORAGE_KEY);
     if (raw === null) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const nightDimmer = NIGHT_DIMMERS.includes(parsed["nightDimmer"] as NightDimmer)
@@ -87,7 +94,7 @@ export function loadSettings(storage: StorageLike | null = browserStorage()): Sm
 
 /** Save settings to storage, ignoring storage quota or sandbox errors. */
 export function saveSettings(
-  settings: SmerdinoSettings,
+  settings: TerrariumSettings,
   storage: StorageLike | null = browserStorage(),
 ): void {
   if (storage === null) return;
@@ -117,10 +124,10 @@ export function nightVeilAlpha(light: number, mode: NightDimmer, sleepMode = fal
 
 /** Step a setting option forward (`delta = 1`) or backward (`delta = -1`). */
 export function stepSetting(
-  current: SmerdinoSettings,
+  current: TerrariumSettings,
   index: number,
   delta: -1 | 1,
-): SmerdinoSettings {
+): TerrariumSettings {
   const next = { ...current };
   if (index === 0) {
     next.autoTour = !current.autoTour;

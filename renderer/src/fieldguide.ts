@@ -1,5 +1,5 @@
 /**
- * The Naturalist's Field Guide (`Tab` or `M`) for Lineage-Smerdino (`512x300` art pixels).
+ * The Naturalist's Field Guide (`Tab`) for Lineage: Terrarium (`512x300` art pixels).
  *
  * Rendered entirely in crisp 1x1 art pixels inside a beveled wooden cover with cream double
  * pages, sage heading band, three physical bookmarks (`1 Species`, `2 Lineage`, `3 Island`),
@@ -25,7 +25,7 @@ import { paintKeycap, type GuideTab } from "./keybar";
 import { SUNLIT } from "./palette";
 import { HAND_FONT, draw, measure } from "./pixelfont";
 import type { ClockMessage, SkyMessage } from "./protocol";
-import { stepSetting, type SmerdinoSettings } from "./settings";
+import { stepSetting, type TerrariumSettings } from "./settings";
 import type { Pixels } from "./terrain/pixels";
 
 /** Art-pixel dimensions of the open double-page field guide (including 2px shadow). */
@@ -176,7 +176,7 @@ export interface FieldGuideView {
   selectedSpeciesId: number | null;
   lineageIndex: number;
   settingIndex: number;
-  settings: SmerdinoSettings;
+  settings: TerrariumSettings;
   portrait: Pixels | null;
   clock: ClockMessage | null;
   sky: SkyMessage | null;
@@ -988,7 +988,7 @@ function paintIslandSpread(
   if (miracle === null) {
     h.box(RIGHT_X0, sealY0, RIGHT_X1, sealY1, CARD_SHADE, PLATE_EDGE);
     h.text("Miracle seal offline (recording)", RIGHT_X0 + 8, sealY0 + 8, FADED_INK);
-    h.text("Connect to live Smerdino server", RIGHT_X0 + 8, sealY0 + 20, FADED_INK);
+    h.text("Connect to live Terrarium server", RIGHT_X0 + 8, sealY0 + 20, FADED_INK);
   } else if (miracle.ready) {
     h.box(RIGHT_X0, sealY0, RIGHT_X1, sealY1, PLATE_ACTIVE, SELECT_EDGE);
     const kw = paintKeycap({ kind: "text", text: "G" }, RIGHT_X0 + 8, sealY0 + 6, (px, py, c) =>
@@ -1155,10 +1155,10 @@ export class FieldGuide {
   handleKey(
     key: string,
     guide: SpeciesGuideSnapshot,
-    settings: SmerdinoSettings,
+    settings: TerrariumSettings,
     callbacks: {
       onFollowSpecies: (speciesId: number) => void;
-      onChangeSettings: (next: SmerdinoSettings) => void;
+      onChangeSettings: (next: TerrariumSettings) => void;
       onInvokeMiracle: () => void;
     },
   ): boolean {
@@ -1289,10 +1289,10 @@ export class FieldGuide {
   handlePointer(
     artX: number,
     artY: number,
-    settings: SmerdinoSettings,
+    settings: TerrariumSettings,
     callbacks: {
       onFollowSpecies: (speciesId: number) => void;
-      onChangeSettings: (next: SmerdinoSettings) => void;
+      onChangeSettings: (next: TerrariumSettings) => void;
       onInvokeMiracle: () => void;
     },
   ): boolean {
@@ -1332,7 +1332,7 @@ export class FieldGuide {
     dtS: number,
     inputs: {
       guide: SpeciesGuideSnapshot;
-      settings: SmerdinoSettings;
+      settings: TerrariumSettings;
       portrait: Pixels | null;
       clock: ClockMessage | null;
       sky: SkyMessage | null;

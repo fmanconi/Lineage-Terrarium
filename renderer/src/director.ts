@@ -152,7 +152,7 @@ export class Director {
    */
   looksAhead = false;
   /**
-   * Autonomous documentary mode (Smerdino screensaver): gently cycles map → middle → local
+   * Autonomous documentary mode (Terrarium screensaver): gently cycles map → middle → local
    * instead of resting permanently on the map when idle.
    */
   autoTour = false;

@@ -1,5 +1,5 @@
 /**
- * Bottom-right whisper key hint bar for Lineage-Smerdino (`512x300` art pixels).
+ * Bottom-right whisper key hint bar for Lineage: Terrarium (`512x300` art pixels).
  *
  * Painted pixel-by-pixel in the same wooden frame, cream card and bitmap font as `card.ts`,
  * lit by `lantern` (`captions.ts`) so that at night in a dark bedroom it warms and dims like

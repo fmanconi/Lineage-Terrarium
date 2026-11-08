@@ -125,7 +125,7 @@ import {
   loadSettings,
   nightVeilAlpha,
   saveSettings,
-  type SmerdinoSettings,
+  type TerrariumSettings,
 } from "./settings";
 
 /** Screen pixels per art pixel (ADR 0007). */
@@ -486,7 +486,7 @@ async function start(): Promise<void> {
     marker.container,
     atmosphere.sky,
   );
-  // Optional bedroom night-dimming veil (Smerdino screensaver), beneath dip and iris.
+  // Optional bedroom night-dimming veil (Terrarium screensaver), beneath dip and iris.
   const nightDim = new Sprite(Texture.WHITE);
   nightDim.tint = DIP_COLOUR;
   nightDim.width = app.screen.width;
@@ -600,7 +600,7 @@ async function start(): Promise<void> {
       return false;
     }
   })();
-  let settings: SmerdinoSettings = loadSettings();
+  let settings: TerrariumSettings = loadSettings();
   const urlCap = params.get("cap");
   if (!hasSavedSettings && (urlCap !== null || desktop)) {
     settings = { ...settings, fpsCap: urlCap !== null ? (Number(urlCap) >= 60 ? 60 : 30) : 60 };
@@ -609,7 +609,7 @@ async function start(): Promise<void> {
     pinned === null && !film && !still && !showcasing && bench === null && settings.autoTour;
 
   let applyFpsCap: (fps: number) => void = () => undefined;
-  const updateSettings = (next: SmerdinoSettings): void => {
+  const updateSettings = (next: TerrariumSettings): void => {
     settings = next;
     saveSettings(settings);
     director.autoTour =
@@ -1371,7 +1371,7 @@ async function start(): Promise<void> {
         meter.frame(performance.now(), index, loop, showcase.time);
       }
     });
-    // The kiosk's cap on the board (R5, ADR 0022): configurable live in Smerdino settings.
+    // The kiosk's cap on the board (R5, ADR 0022): configurable live in Terrarium settings.
     const initialCap =
       bench !== null
         ? Number(params.get("cap") ?? 0)
