@@ -45,13 +45,13 @@ class DesktopApi:
     """JavaScript bridge exposed at ``window.pywebview.api`` inside the game window."""
 
     def __init__(self, initial_fullscreen: bool = False) -> None:
-        self.window: Any = None
+        self._window: Any = None
         self._fullscreen = initial_fullscreen
 
     def toggle_fullscreen(self) -> bool:
-        if self.window is None:
+        if self._window is None:
             return False
-        self.window.toggle_fullscreen()
+        self._window.toggle_fullscreen()
         self._fullscreen = not self._fullscreen
         return self._fullscreen
 
@@ -174,11 +174,30 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    log_dir = REPO_ROOT / "data"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "desktop.log"
+
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(),
+        logging.FileHandler(log_file, encoding="utf-8", mode="a"),
+    ]
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
     )
     logging.getLogger("websockets").setLevel(logging.WARNING)
 
+    log.info("--- Lineage desktop launcher starting (argv=%s) ---", argv)
+    try:
+        _run_desktop(args)
+    except Exception:
+        log.exception("Fatal crash in Lineage desktop launcher")
+        raise
+
+
+def _run_desktop(args: argparse.Namespace) -> None:
     if not (args.dist / "index.html").is_file():
         raise SystemExit(f"Missing renderer build at {args.dist} (run npm run build:kiosk)")
 
@@ -193,6 +212,7 @@ def main(argv: list[str] | None = None) -> None:
         years_ahead=args.years_ahead,
     )
     url = f"http://127.0.0.1:{server.port}/?desktop=1&fast=1"
+    log.info("Embedded server ready at %s", url)
 
     if args.smoke_test:
         try:
@@ -213,6 +233,7 @@ def main(argv: list[str] | None = None) -> None:
 
     import webview  # Lazy import so headless Linux servers never need pywebview
 
+    log.info("Creating pywebview window pointing to %s", url)
     api = DesktopApi(initial_fullscreen=args.fullscreen)
     window = webview.create_window(
         "Lineage",
@@ -224,10 +245,12 @@ def main(argv: list[str] | None = None) -> None:
         background_color="#10081c",
         js_api=api,
     )
-    api.window = window
+    api._window = window
     window.events.closed += lambda: shutdown()
     try:
+        log.info("Starting webview event loop")
         webview.start(debug=False)
+        log.info("webview event loop terminated cleanly")
     finally:
         shutdown()
 
