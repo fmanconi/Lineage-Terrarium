@@ -117,6 +117,7 @@ import { FieldGuide, type MiracleStatus } from "./fieldguide";
 import { createFrameCap } from "./framecap";
 import { KeyBar } from "./keybar";
 import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
+import { PurposefulWandererMod } from "./mods/builtin/wanderer";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
 import {
@@ -408,6 +409,7 @@ async function start(): Promise<void> {
   const mods = new ModRegistry(modStorage);
   const dashboardMod = new DashboardButtonsMod(keyBar);
   mods.register(dashboardMod);
+  mods.register(new PurposefulWandererMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });

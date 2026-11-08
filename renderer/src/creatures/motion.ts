@@ -32,6 +32,16 @@ const STROLL_TRIES = 8;
 /** Places along the way to a stroll's goal that must be free too, besides the goal (R5). */
 const STROLL_CHECKS = 3;
 /**
+ * The Purposeful Wanderer mod (`mods/builtin/wanderer.ts`): a stroll goes on ahead, within
+ * this much either side of the heading (radians), and each try that finds the way blocked
+ * widens the cone by this much more, up to all the way round; a stroll goes at least this
+ * share of the leash; paused, the head looks about only this far either side.
+ */
+const WANDER_CONE = Math.PI / 3;
+const WANDER_WIDEN = Math.PI / 6;
+const WANDER_LEAST_SHARE = 0.4;
+const WANDER_LOOK_SPAN = Math.PI / 12;
+/**
  * Walking to where the sim has it, it looks this share of its body length ahead (R5); what
  * is in the way there it walks round, turning aside by `STEER_STEP` (radians) at a time,
  * up to `STEER_TRIES` times either way; with no way round, it goes straight on.
@@ -134,6 +144,17 @@ export interface Walker {
   neck?: number;
   bend?: number;
   turning?: number;
+}
+
+let purposefulWandererActive = false;
+
+/** Switch the Purposeful Wanderer mod's way of strolling on or off (renderer only). */
+export function setPurposefulWanderer(active: boolean): void {
+  purposefulWandererActive = active;
+}
+
+export function isPurposefulWanderer(): boolean {
+  return purposefulWandererActive;
 }
 
 export function leash(length: number): number {
@@ -272,14 +293,16 @@ export function drive(
   if (motion.mode === "pause") {
     motion.timer -= dtS;
     // Looking about: now and then a new direction near the one it faced.
-    if (random() < dtS / 1.2) motion.look = motion.facing + (random() * 2 - 1) * LOOK_SPAN;
+    // With the Purposeful Wanderer mod, only a little way either side: no turning on the spot.
+    const span = purposefulWandererActive ? WANDER_LOOK_SPAN : LOOK_SPAN;
+    if (random() < dtS / 1.2) motion.look = motion.facing + (random() * 2 - 1) * span;
     // Only the head turns: the body stays as it stood.
     walker.heading = keep(walker, turnToward(walker.heading, motion.look, LOOK_RATE, dtS));
     if (motion.timer <= 0) {
       if (
         !motion.following &&
         random() < STROLL_CHANCE &&
-        chooseStroll(motion, walker.head, reach, random, free)
+        chooseStroll(motion, walker.head, walker.heading, reach, random, free)
       ) {
         motion.mode = "stroll";
       } else {
@@ -664,19 +687,36 @@ export function stepOut(
   }
 }
 
-/** Pick a place within the leash that the body can stand on; false if none was found. */
-function chooseStroll(
+/**
+ * Pick a place within the leash that the body can stand on; false if none was found.
+ * Anywhere round the anchor; with the Purposeful Wanderer mod, ahead of the head within
+ * a cone about `heading` that widens with each blocked try.
+ */
+export function chooseStroll(
   motion: Motion,
   head: Point,
+  heading: number,
   reach: number,
   random: () => number,
   free: (x: number, y: number) => boolean,
 ): boolean {
   for (let attempt = 0; attempt < STROLL_TRIES; attempt++) {
-    const angle = random() * 2 * Math.PI;
-    const distance = reach * Math.sqrt(random());
-    const x = motion.anchor.x + Math.cos(angle) * distance;
-    const y = motion.anchor.y + Math.sin(angle) * distance;
+    let x: number;
+    let y: number;
+    if (purposefulWandererActive) {
+      const cone = Math.min(Math.PI, WANDER_CONE + attempt * WANDER_WIDEN);
+      const angle = heading + (random() * 2 - 1) * cone;
+      const distance = reach * lerp(WANDER_LEAST_SHARE, 1, random());
+      x = head.x + Math.cos(angle) * distance;
+      y = head.y + Math.sin(angle) * distance;
+      // Never past the leash: near its end, a wider try turns it back.
+      if (Math.hypot(x - motion.anchor.x, y - motion.anchor.y) > reach) continue;
+    } else {
+      const angle = random() * 2 * Math.PI;
+      const distance = reach * Math.sqrt(random());
+      x = motion.anchor.x + Math.cos(angle) * distance;
+      y = motion.anchor.y + Math.sin(angle) * distance;
+    }
     // The goal and the way there clear (R5), so that it does not stop short at a bush.
     let clear = free(x, y);
     for (let k = 1; clear && k <= STROLL_CHECKS; k++) {
