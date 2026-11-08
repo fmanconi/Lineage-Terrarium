@@ -47,13 +47,32 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
+/** Where each write also goes, once the desktop app keeps its preferences on disk (`prefs.ts`). */
+let mirror: ((key: string, value: string) => void) | null = null;
+
+/** Send every write through `browserStorage()` to `write` as well (null: stop). */
+export function mirrorStorage(write: ((key: string, value: string) => void) | null): void {
+  mirror = write;
+}
+
 /** The browser's `localStorage`, or null where it is missing or refused (kiosk sandbox, tests). */
 export function browserStorage(): StorageLike | null {
+  let storage: Storage | null;
   try {
-    return typeof localStorage === "undefined" ? null : localStorage;
+    storage = typeof localStorage === "undefined" ? null : localStorage;
   } catch {
     return null;
   }
+  if (storage === null || mirror === null) return storage;
+  const local = storage;
+  const write = mirror;
+  return {
+    getItem: (key) => local.getItem(key),
+    setItem: (key, value) => {
+      local.setItem(key, value);
+      write(key, value);
+    },
+  };
 }
 
 const NIGHT_DIMMERS: readonly NightDimmer[] = ["off", "soft", "dark"];

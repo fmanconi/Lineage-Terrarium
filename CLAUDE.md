@@ -106,7 +106,8 @@ lineage/
 │   │   │                     #   `pieces.ts`), creatures/ (R5: the creature layer `layer.ts`,
 │   │   │                     #   its atlas, `habitat.ts`, `views.ts`, colours from the genes,
 │   │   │                     #   the map's dots, wading, remains, portraits, eating, hunting,
-│   │   │                     #   nursery, sleep), card.ts (the name card),
+│   │   │                     #   nursery, sleep), card.ts (the name card), pip.ts (the desktop's
+│   │   │                     #   floating miniature, a frameless always-on-top window),
 │   │   │                     #   marker.ts (a chronicle entry's place), bench.ts and
 │   │   │                     #   benchplan.ts (R5: the scene's benchmark), framecap.ts (the
 │   │   │                     #   30 fps cap), gpu.ts, framestats.ts, showcase/ (R6: the

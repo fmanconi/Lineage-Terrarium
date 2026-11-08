@@ -115,6 +115,8 @@ import { Bench, type BootMarks } from "./bench";
 import type { Rgb } from "./atmosphere/light";
 import { FieldGuide, type MiracleStatus } from "./fieldguide";
 import { createFrameCap } from "./framecap";
+import { PipChrome } from "./pip";
+import { restoreDesktopPrefs } from "./prefs";
 import { KeyBar } from "./keybar";
 import { ChristmasMod } from "./mods/builtin/christmas";
 import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
@@ -126,6 +128,7 @@ import {
 import { PackWarfareMod } from "./mods/builtin/pack-warfare";
 import { PurposefulWandererMod } from "./mods/builtin/wanderer";
 import { FootprintsTrailsMod } from "./mods/builtin/trails";
+import { HealthBarsMod } from "./mods/builtin/healthbars";
 import { SeasonalFlairMod } from "./mods/builtin/seasons-flair";
 import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod, biophonyEngine, isBiophonyActive } from "./mods/builtin/biophony";
@@ -290,10 +293,19 @@ declare global {
     __advance?: (seconds: number) => void;
     /** Inspect or toggle the naturalist's field guide (tests). */
     __guide?: () => { open: boolean; tab: string; species: number; totalCreatures: number };
+    /** The game window, told by the desktop app that the miniature took over (true) or
+     * gave the island back (false): it stops drawing and holds its sound meanwhile. */
+    __pipAway?: (away: boolean) => void;
     /** Optional pywebview native desktop window API. */
     pywebview?: {
       api?: {
         toggle_fullscreen?: () => Promise<boolean>;
+        /** Open the floating miniature (a second, frameless window) and hide this one. */
+        open_pip?: () => Promise<boolean>;
+        /** From the miniature: close it; `back` shows the game window again, else minimised. */
+        close_pip?: (back: boolean) => Promise<boolean>;
+        /** From the miniature: resize its window, keeping still the corner opposite `edges`. */
+        pip_resize?: (width: number, height: number, edges: number) => Promise<unknown>;
       };
     };
   }
@@ -316,6 +328,10 @@ async function start(): Promise<void> {
   const showcasing = params.get("showcase") !== null;
   const desktop = params.get("desktop") !== null;
   const fastLife = params.get("fast") !== null;
+  // The desktop's floating miniature (`pip.ts`): the scene alone, with its own chrome.
+  const pipWindow = params.get("pip") !== null;
+  // The desktop app's sound, mods and settings, kept on disk: back before anything reads them.
+  if (desktop) await restoreDesktopPrefs();
 
   const app = new Application();
   await app.init({
@@ -429,6 +445,7 @@ async function start(): Promise<void> {
   mods.register(new PackWarfareMod());
   mods.register(new DramaticDirectorMod());
   mods.register(new FootprintsTrailsMod());
+  mods.register(new HealthBarsMod());
   mods.register(new SeasonalFlairMod());
   mods.register(new EcoHeatmapMod());
   const biophonyMod = new BiophonyMod();
@@ -437,13 +454,16 @@ async function start(): Promise<void> {
   mods.register(xlScale);
   mods.register(new FormicariumMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
-  frame.append(
-    captions.element,
-    card.element,
-    fieldGuide.element,
-    keyBar.element,
-    modMenu.element,
-  );
+  // The miniature shows the scene alone: no scroll, no name card, no key bar.
+  if (pipWindow) frame.append(fieldGuide.element, modMenu.element);
+  else
+    frame.append(
+      captions.element,
+      card.element,
+      fieldGuide.element,
+      keyBar.element,
+      modMenu.element,
+    );
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
   const userModsLoaded = loadUserMods(mods);
@@ -840,7 +860,25 @@ async function start(): Promise<void> {
   let isPiP = false;
   let pipVideo: HTMLVideoElement | null = null;
 
+  const desktopApi = (): NonNullable<NonNullable<Window["pywebview"]>["api"]> | undefined =>
+    window.pywebview?.api;
   const togglePiP = async (): Promise<void> => {
+    // In the miniature itself the key goes back to the game window.
+    if (pipWindow) {
+      await desktopApi()?.close_pip?.(true);
+      return;
+    }
+    // The desktop app: a floating window of its own (the browser's video PiP below is
+    // the fallback for a plain browser tab).
+    const api = desktopApi();
+    if (api?.open_pip !== undefined) {
+      try {
+        await api.open_pip();
+      } catch (err) {
+        console.warn("Could not open the miniature window:", err);
+      }
+      return;
+    }
     try {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
@@ -897,7 +935,7 @@ async function start(): Promise<void> {
       void toggleFullscreen();
       return;
     }
-    if (event.key === "p" || event.key === "P") {
+    if (event.key === "p" || event.key === "P" || (pipWindow && event.key === "Escape")) {
       event.preventDefault();
       void togglePiP();
       return;
@@ -1424,7 +1462,8 @@ async function start(): Promise<void> {
         : fieldGuide.miracleStatus.ready
           ? "ready"
           : "cooldown";
-    const effectiveBarMode = automatedRun && !userInteracted ? "hidden" : settings.keyBarMode;
+    const effectiveBarMode =
+      pipWindow || (automatedRun && !userInteracted) ? "hidden" : settings.keyBarMode;
     const barOptions: KeyBarOptions = {
       mode: effectiveBarMode,
       guideOpen: fieldGuide.open,
@@ -1528,6 +1567,29 @@ async function start(): Promise<void> {
     applyFpsCap = (fps: number) => {
       frameCapper.set(fps);
     };
+    window.__pipAway = (away) => {
+      frameCapper.pause(away);
+      // The miniature may have muted or unmuted the sound: the saved choice is the one.
+      if (!away) biophonyEngine.loadSettings();
+      biophonyEngine.setHeld(away);
+    };
+    if (pipWindow) {
+      const chrome = new PipChrome(
+        {
+          back: () => void desktopApi()?.close_pip?.(true),
+          close: () => void desktopApi()?.close_pip?.(false),
+          toggleAudio: () => biophonyEngine.toggleMute(),
+          muted: () => biophonyEngine.getSettings().muted,
+          nextView: () => {
+            fieldGuide.close();
+            press();
+          },
+          resize: (width, height, edges) => desktopApi()?.pip_resize?.(width, height, edges),
+        },
+        DESIGN_WIDTH / DESIGN_HEIGHT,
+      );
+      document.body.appendChild(chrome.element);
+    }
   }
   window.__painting = () => landscape.painting;
 

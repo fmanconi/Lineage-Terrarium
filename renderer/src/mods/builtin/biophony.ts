@@ -116,6 +116,9 @@ export class BiophonyEngine {
   thunderCooldownS = 0;
   private isNight = false;
   private animalCount = 0;
+  /** Silenced for now without touching the saved settings (the game window while the
+   * desktop miniature plays the island in its place). */
+  private held = false;
 
   constructor(customContext: AudioContextLike | null = null) {
     this.ctx = customContext;
@@ -211,6 +214,16 @@ export class BiophonyEngine {
     this.saveSettings();
   }
 
+  /** Hold the soundscape silent (true) or let it play again (false); nothing is saved. */
+  setHeld(held: boolean): void {
+    this.held = held;
+    this.applyMasterGain();
+  }
+
+  isHeld(): boolean {
+    return this.held;
+  }
+
   toggleMute(): boolean {
     this.setMuted(!this.settings.muted);
     return this.settings.muted;
@@ -233,7 +246,7 @@ export class BiophonyEngine {
 
   private applyMasterGain(): void {
     if (!this.masterGain || !this.ctx) return;
-    const target = this.settings.muted ? 0 : this.settings.volume;
+    const target = this.settings.muted || this.held ? 0 : this.settings.volume;
     try {
       this.masterGain.gain.setValueAtTime(target, this.ctx.currentTime);
     } catch {
@@ -261,7 +274,7 @@ export class BiophonyEngine {
 
       // 2. Gentle Wind & Surf Swell (warm brownian noise with lowpass filter)
       this.windGain = this.ctx.createGain();
-      this.windGain.gain.value = 0.10;
+      this.windGain.gain.value = 0.1;
       this.windFilter = this.ctx.createBiquadFilter();
       this.windFilter.type = "lowpass";
       this.windFilter.frequency.value = 260;
@@ -322,7 +335,7 @@ export class BiophonyEngine {
       // Gentle wave modulation for living organic movement
       const a1 = 0.32 + 0.04 * Math.sin(twoPi * 0.25 * t);
       const a2 = 0.26 + 0.03 * Math.sin(twoPi * 0.5 * t + 1.2);
-      const a3 = 0.20 + 0.03 * Math.sin(twoPi * 0.25 * t + 2.4);
+      const a3 = 0.2 + 0.03 * Math.sin(twoPi * 0.25 * t + 2.4);
       const a4 = 0.14 + 0.02 * Math.sin(twoPi * 0.75 * t + 0.8);
       const a5 = 0.08 + 0.01 * Math.sin(twoPi * 0.5 * t + 3.1);
       const a6 = 0.04 + 0.01 * Math.sin(twoPi * 0.25 * t + 4.2);

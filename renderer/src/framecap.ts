@@ -25,6 +25,8 @@ const EARLY_MS = 2;
 export interface FrameCap {
   readonly fps: number;
   set(fps: number): number;
+  /** Stop drawing altogether (true) until unpaused; the cap is kept. */
+  pause(paused: boolean): void;
 }
 
 /**
@@ -35,6 +37,9 @@ export function createFrameCap(ticker: Ticker, initialFps: number): FrameCap {
   let currentFps = Number.isFinite(initialFps) && initialFps > 0 ? initialFps : 0;
   let started = false;
   let last = -Infinity;
+  let paused = false;
+  /** Whether the ticker ran on its own rAF when paused, to start it again on unpause. */
+  let tickerWasRunning = false;
 
   const ensureLoop = (): void => {
     if (started) return;
@@ -43,6 +48,7 @@ export function createFrameCap(ticker: Ticker, initialFps: number): FrameCap {
     ticker.stop();
     const loop = (now: number): void => {
       requestAnimationFrame(loop);
+      if (paused) return;
       if (currentFps > 0) {
         const intervalMs = 1000 / currentFps;
         if (now - last < intervalMs - EARLY_MS) return;
@@ -63,6 +69,17 @@ export function createFrameCap(ticker: Ticker, initialFps: number): FrameCap {
       currentFps = Number.isFinite(nextFps) && nextFps > 0 ? nextFps : 0;
       if (currentFps > 0) ensureLoop();
       return currentFps;
+    },
+    pause(next: boolean): void {
+      if (next === paused) return;
+      paused = next;
+      if (started) return;
+      if (paused) {
+        tickerWasRunning = ticker.started;
+        ticker.stop();
+      } else if (tickerWasRunning) {
+        ticker.start();
+      }
     },
   };
 }
