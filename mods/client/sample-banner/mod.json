@@ -1,0 +1,9 @@
+{
+  "id": "sample-banner",
+  "name": "Sample Banner",
+  "version": "1.0.0",
+  "description": "A sample user mod: a small banner at the top of the screen saying user mods are loaded.",
+  "author": "Lineage",
+  "defaultEnabled": false,
+  "entry": "index.js"
+}
