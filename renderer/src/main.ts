@@ -732,6 +732,57 @@ async function start(): Promise<void> {
     }
   };
 
+  let isPiP = false;
+  let pipVideo: HTMLVideoElement | null = null;
+
+  const togglePiP = async (): Promise<void> => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        isPiP = false;
+        return;
+      }
+      if (!pipVideo) {
+        pipVideo = document.createElement("video");
+        pipVideo.muted = true;
+        pipVideo.playsInline = true;
+        pipVideo.autoplay = true;
+        const captureCanvas = canvas as HTMLCanvasElement & {
+          captureStream?: (fps: number) => MediaStream;
+        };
+        const stream = captureCanvas.captureStream?.(30);
+        if (!stream) {
+          console.warn("Canvas captureStream not supported in this environment");
+          return;
+        }
+        pipVideo.srcObject = stream;
+        await pipVideo.play();
+        pipVideo.addEventListener("leavepictureinpicture", () => {
+          isPiP = false;
+        });
+      }
+      await pipVideo.requestPictureInPicture();
+      isPiP = true;
+    } catch (err) {
+      console.warn("PiP failed:", err);
+      isPiP = false;
+    }
+  };
+
+  const takeSnapshot = (): void => {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `lineage-snapshot-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.warn("Snapshot failed:", e);
+    }
+  };
+
   window.addEventListener("keydown", (event) => {
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     userInteracted = true;
@@ -739,6 +790,16 @@ async function start(): Promise<void> {
     if (event.key === "f" || event.key === "F" || event.key === "F11") {
       event.preventDefault();
       void toggleFullscreen();
+      return;
+    }
+    if (event.key === "p" || event.key === "P") {
+      event.preventDefault();
+      void togglePiP();
+      return;
+    }
+    if (event.key === "c" || event.key === "C") {
+      event.preventDefault();
+      takeSnapshot();
       return;
     }
     if (event.key === "n" || event.key === "N") {
@@ -791,6 +852,7 @@ async function start(): Promise<void> {
       if (barHit === "guide") toggleGuide();
       else if (barHit === "night") toggleSleep();
       else if (barHit === "fullscreen") void toggleFullscreen();
+      else if (barHit === "pip") void togglePiP();
       else if (barHit === "view") {
         fieldGuide.close();
         press();
@@ -1230,6 +1292,7 @@ async function start(): Promise<void> {
       ...(miracleDot === undefined ? {} : { miracleDot }),
       sleepMode: settings.sleepMode,
       fullscreen: isFullscreen,
+      pip: isPiP,
       scrollShowing,
       lamp,
     });

@@ -44,6 +44,8 @@ const MOON_ON = 0xe8b44c;
 const MOON_BITMAP = ["..##.", ".##..", ".##..", ".##..", "..##."] as const;
 const FULL_OFF_BITMAP = ["##.##", "#...#", ".....", "#...#", "##.##"] as const;
 const FULL_ON_BITMAP = [".#.#.", "##.##", ".....", "##.##", ".#.#."] as const;
+const PIP_OFF_BITMAP = ["#####", "#...#", "#..##", "#..##", "#####"] as const;
+const PIP_ON_BITMAP = ["#####", "#...#", "#.###", "#.###", "#####"] as const;
 
 /** Pixel arrow glyphs (11x7) for keycaps so no character outside `pixelfont.ts` is needed. */
 export const ARROW_BITMAPS = {
@@ -74,8 +76,8 @@ export interface KeyHint {
   id: string;
   key: KeyGlyph;
   label: string;
-  /** Optional status gem, crescent moon, or fullscreen corner glyph beside the label. */
-  dot?: "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on";
+  /** Optional status gem, crescent moon, fullscreen corner glyph, or PiP miniature window glyph. */
+  dot?: "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on" | "pip-off" | "pip-on";
 }
 
 export type GuideTab = "species" | "lineage" | "island";
@@ -87,6 +89,7 @@ export function hintsForState(
   miracleDot?: "ready" | "cooldown",
   sleepMode = false,
   fullscreen = false,
+  pip = false,
 ): KeyHint[] {
   if (!guideOpen) {
     return [
@@ -109,6 +112,12 @@ export function hintsForState(
         key: { kind: "text", text: "F" },
         label: "Full",
         dot: fullscreen ? "full-on" : "full-off",
+      },
+      {
+        id: "pip",
+        key: { kind: "text", text: "P" },
+        label: "PiP",
+        dot: pip ? "pip-on" : "pip-off",
       },
     ];
   }
@@ -270,15 +279,24 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
         hint.dot === "moon-off" ||
         hint.dot === "moon-on" ||
         hint.dot === "full-off" ||
-        hint.dot === "full-on"
+        hint.dot === "full-on" ||
+        hint.dot === "pip-off" ||
+        hint.dot === "pip-on"
       ) {
-        const iconCol = hint.dot === "moon-on" || hint.dot === "full-on" ? MOON_ON : MOON_OFF;
+        const iconCol =
+          hint.dot === "moon-on" || hint.dot === "full-on" || hint.dot === "pip-on"
+            ? MOON_ON
+            : MOON_OFF;
         const bitmap =
           hint.dot === "full-on"
             ? FULL_ON_BITMAP
             : hint.dot === "full-off"
               ? FULL_OFF_BITMAP
-              : MOON_BITMAP;
+              : hint.dot === "pip-on"
+                ? PIP_ON_BITMAP
+                : hint.dot === "pip-off"
+                  ? PIP_OFF_BITMAP
+                  : MOON_BITMAP;
         const my = top + 3;
         bitmap.forEach((row, r) => {
           [...row].forEach((ch, c) => {
@@ -370,6 +388,7 @@ export class KeyBar {
       miracleDot?: "ready" | "cooldown";
       sleepMode?: boolean;
       fullscreen?: boolean;
+      pip?: boolean;
       scrollShowing: boolean;
       lamp?: Rgb;
     },
@@ -382,6 +401,7 @@ export class KeyBar {
       miracleDot,
       sleepMode = false,
       fullscreen = false,
+      pip = false,
       scrollShowing,
       lamp = DAYLIGHT,
     } = options;
@@ -406,7 +426,7 @@ export class KeyBar {
       return;
     }
 
-    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode, fullscreen);
+    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode, fullscreen, pip);
     const key = JSON.stringify([hints, lampKey(lamp)]);
     const share = (v: number, total: number): string => `${(100 * v) / total}%`;
 

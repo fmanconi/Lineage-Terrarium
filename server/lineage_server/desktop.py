@@ -99,9 +99,19 @@ def start_embedded_server(
     config: Config,
     time_scale: float,
     years_ahead: int,
-    port: int = 0,
+    port: int = 8080,
 ) -> tuple[Server, Callable[[], None], threading.Thread]:
     """Run ``Server`` on a daemon thread and block until its HTTP/WS socket is ready."""
+    if port != 0:
+        import socket
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+        except OSError:
+            log.warning("Port %d is already in use; falling back to ephemeral port", port)
+            port = 0
+
     settings = load_settings(DEFAULT_SETTINGS)
     settings = replace(
         settings,
@@ -167,6 +177,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--time-scale", type=float, default=FAST_LIFE_TIME_SCALE)
     parser.add_argument("--years-ahead", type=int, default=400)
     parser.add_argument("--fullscreen", action="store_true", help="open directly in fullscreen")
+    parser.add_argument("--port", type=int, default=8080, help="port to serve on (default: 8080)")
+    parser.add_argument(
+        "--browser",
+        action="store_true",
+        help="open in default web browser tab and run headlessly",
+    )
     parser.add_argument(
         "--smoke-test",
         action="store_true",
@@ -210,6 +226,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
         config=config,
         time_scale=args.time_scale,
         years_ahead=args.years_ahead,
+        port=args.port,
     )
     url = f"http://127.0.0.1:{server.port}/?desktop=1&fast=1"
     log.info("Embedded server ready at %s", url)
@@ -231,7 +248,37 @@ def _run_desktop(args: argparse.Namespace) -> None:
             shutdown()
         return
 
-    import webview  # Lazy import so headless Linux servers never need pywebview
+    import webbrowser
+
+    try:
+        webbrowser.open(url)
+        log.info("Opened default browser tab at %s", url)
+    except Exception:
+        log.warning("Could not open default browser tab automatically")
+
+    if args.browser:
+        log.info("Running in headless browser server mode; press Ctrl+C to stop")
+        try:
+            while True:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            shutdown()
+        return
+
+    try:
+        import webview  # Lazy import so headless Linux servers never need pywebview
+    except ImportError:
+        log.info("pywebview not installed; running in browser server mode")
+        try:
+            while True:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            shutdown()
+        return
 
     log.info("Creating pywebview window pointing to %s", url)
     api = DesktopApi(initial_fullscreen=args.fullscreen)
