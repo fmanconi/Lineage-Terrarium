@@ -75,6 +75,7 @@ import {
 import { VISIBLE_FROM } from "../plants/look";
 import { windStrength, type Wind } from "../plants/wind";
 import { FADE_S } from "../terrain/grounds";
+import { isChristmasActive } from "../mods/builtin/christmas";
 
 /** The colours of things that glow (0xRRGGBB): lava and fire, sparks, the seed's gold, the ark's light. */
 const LAVA = [0xff5a1e, 0xff8a2a, 0xffc04a] as const;
@@ -174,6 +175,26 @@ const SNOW_LAYERS = [
   { share: 0.2, speed: 1.5, size: 1.5, alpha: 1 },
 ] as const;
 const SNOW_TONES = [0xc8d4e4, 0xe4ecf6, 0xffffff] as const;
+/**
+ * The Christmas mod (`mods/builtin/christmas.ts`): the least fall it keeps going (as
+ * `rain`, all of it snow); the fairy lights' colours, the share of trees and bushes that
+ * carry them, how many at most are drawn, how fast they twinkle (radians a second) and
+ * how bright by day and at full dark; the winter star's place on the screen (shares of
+ * its width and height), its colours, and the dark it begins to show from and is full at.
+ */
+const YULE_SNOW = 0.75;
+const FAIRY_COLOURS = [0xff3b3b, 0xffc93c, 0x4cd964, 0x4de1ff] as const;
+const FAIRY_SHARE = 0.4;
+const MOST_FAIRY_LIGHTS = 240;
+const FAIRY_TWINKLE = 4;
+const FAIRY_DAY = 0.35;
+const FAIRY_NIGHT = 1;
+const FAIRY_FORMS: readonly string[] = ["SHRUB", "BROADLEAF", "CONIFER"];
+const STAR_AT = { x: 0.82, y: 0.12 } as const;
+const STAR_CORE = 0xffffff;
+const STAR_ARMS = 0xffe27a;
+const STAR_FROM = 0.3;
+const STAR_FULL = 0.6;
 /** Glow: seconds a pulse takes, and the glow round an animal's square on the map (art pixels). */
 const GLOW_PULSE_S = 3.5;
 const GLOW_MAP_PX = 8;
@@ -601,6 +622,12 @@ export class Atmosphere {
     const snowing = this.snowyShare(view) >= SNOW_VIEW_SHARE ? 1 : 0;
     // While nothing falls the kind changes at once; while it falls, rain turns to snow slowly.
     this.snowfall = this.rain <= 0.01 ? snowing : ease(this.snowfall, snowing);
+    // The holidays (the Christmas mod): snow falls whatever the season and the sky.
+    const yule = isChristmasActive();
+    if (yule) {
+      this.snowfall = 1;
+      this.rain = Math.max(this.rain, YULE_SNOW);
+    }
     const wasEnding = this.sequence.active;
     this.sequence.update(dtS);
     const moment = this.sequence.active ? this.sequence.moment : null;
@@ -631,6 +658,10 @@ export class Atmosphere {
     for (const effect of this.effects) shake = Math.max(shake, this.drawEffect(effect, view));
     this.drawRain(view);
     this.drawSnow(view);
+    if (yule) {
+      this.drawFairyLights(view, dark);
+      this.drawWinterStar(view, dark);
+    }
     const lightning = this.drawLightning(view);
     if (moment !== null) shake = Math.max(shake, this.drawEnd(moment, view, dtS));
     else this.flood.visible = false;
@@ -1488,6 +1519,76 @@ export class Atmosphere {
         sprite.tint = SNOW_TONES[layer] ?? 0xffffff;
         sprite.alpha = depth.alpha;
       }
+    }
+  }
+
+  /**
+   * The Christmas mod's fairy lights: on some of the trees and bushes in sight, a bulb in
+   * one of four festive colours, each twinkling on its own beat, brighter in the dark.
+   */
+  private drawFairyLights(view: View, dark: number): void {
+    const land = view.land;
+    if (land === null) return;
+    const { cells, tile } = view;
+    const bright = FAIRY_DAY + (FAIRY_NIGHT - FAIRY_DAY) * dark;
+    const bulb = Math.max(Math.round(tile / 8), 1);
+    let drawn = 0;
+    const x0 = Math.max(Math.floor(cells.x0), 0);
+    const x1 = Math.min(Math.ceil(cells.x1), land.width);
+    for (
+      let y = Math.max(Math.floor(cells.y0), 0);
+      y < Math.min(Math.ceil(cells.y1), land.height);
+      y++
+    ) {
+      for (let x = x0; x < x1; x++) {
+        if (cellHash(x, y, 601) >= FAIRY_SHARE) continue;
+        const cell = y * land.width + x;
+        if ((land.biomass[cell] ?? 0) < VISIBLE_FROM) continue;
+        if (!FAIRY_FORMS.includes(land.coverClasses[land.cover[cell] ?? 0] ?? "")) continue;
+        const colour = FAIRY_COLOURS[Math.floor(cellHash(x, y, 602) * FAIRY_COLOURS.length)];
+        const beat = Math.sin(this.timeS * FAIRY_TWINKLE + cellHash(x, y, 603) * 2 * Math.PI);
+        const alpha = bright * (0.5 + 0.5 * beat);
+        // Up in the crown, off the cell's middle by a hash.
+        const lx = x + 0.2 + 0.6 * cellHash(x, y, 604);
+        const ly = y + 0.1 + 0.5 * cellHash(x, y, 605);
+        this.halo(lx, ly, bulb * 5, colour ?? FAIRY_COLOURS[0], 0.5 * alpha, tile);
+        const sprite = this.lightPool.next(this.sprites.fleck);
+        placeCentred(sprite, lx, ly, tile, bulb);
+        sprite.tint = colour ?? FAIRY_COLOURS[0];
+        sprite.alpha = Math.min(alpha, 1);
+        if (++drawn >= MOST_FAIRY_LIGHTS) return;
+      }
+    }
+  }
+
+  /** The Christmas mod's winter star: a cross of 5×5 pixels high in the sky at dusk and at night. */
+  private drawWinterStar(view: View, dark: number): void {
+    const shown = Math.min(Math.max((dark - STAR_FROM) / (STAR_FULL - STAR_FROM), 0), 1);
+    if (shown <= 0.01) return;
+    const twinkle = 0.8 + 0.2 * Math.sin(this.timeS * 2.3);
+    const alpha = shown * twinkle;
+    const cx = Math.round(view.width * STAR_AT.x);
+    const cy = Math.round(view.height * STAR_AT.y);
+    const halo = this.boltPool.next(this.sprites.halo);
+    placeCentred(halo, cx + 0.5, cy + 0.5, 1, 15);
+    halo.tint = STAR_ARMS;
+    halo.alpha = 0.35 * alpha;
+    for (const [dx, dy, colour, fade] of [
+      [0, 0, STAR_CORE, 1],
+      [-1, 0, STAR_CORE, 1],
+      [1, 0, STAR_CORE, 1],
+      [0, -1, STAR_CORE, 1],
+      [0, 1, STAR_CORE, 1],
+      [-2, 0, STAR_ARMS, 0.7],
+      [2, 0, STAR_ARMS, 0.7],
+      [0, -2, STAR_ARMS, 0.7],
+      [0, 2, STAR_ARMS, 0.7],
+    ] as const) {
+      const sprite = this.boltPool.next(this.sprites.fleck);
+      sprite.position.set(cx + dx, cy + dy);
+      sprite.scale.set(1, 1);
+      sprite.tint = colour;
+      sprite.alpha = alpha * fade;
     }
   }
 

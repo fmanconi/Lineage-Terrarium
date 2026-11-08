@@ -141,6 +141,7 @@ import { Sparks } from "./sparks";
 import { envenom } from "./venom";
 import { WAKE_EVERY_PX, WAKE_FROM, wakePair } from "./wake";
 import type { Random } from "../rng";
+import { isChristmasActive } from "../mods/builtin/christmas";
 
 /** Wandering: how fast the turn rate drifts and settles (per second). */
 /**
@@ -278,6 +279,8 @@ interface Creature {
   pen: CreatureSeed["pen"];
   /** One sprite per part of the plan, in the same order. */
   sprites: Sprite[];
+  /** Its Santa hat (the Christmas mod), over its head; shown only while the mod is on. */
+  hat: Container;
   legs: Leg[];
   /** Within the view of the last update, so worth drawing. */
   inView: boolean;
@@ -408,6 +411,21 @@ export interface Occluders {
     radii?: readonly number[],
   ): number;
 }
+
+/**
+ * The Santa hat of the Christmas mod (`mods/builtin/christmas.ts`), in head radii: the red
+ * cone's width at the brim and its height, how far it leans, the white brim's width and
+ * depth, the pom-pom across, and how far above the head's middle the brim sits.
+ */
+const HAT_RED = 0xd32f2f;
+const HAT_WHITE = 0xffffff;
+const HAT_WIDE = 1.3;
+const HAT_TALL = 1.5;
+const HAT_LEAN = 0.3;
+const HAT_BRIM_WIDE = 1.5;
+const HAT_BRIM_DEEP = 0.35;
+const HAT_POM = 0.5;
+const HAT_ABOVE = 0.75;
 
 /** Steps of opacity an arriving creature comes into being in (and a dead one fades in). */
 const ARRIVE_STEPS = 4;
@@ -639,6 +657,7 @@ export class CreatureLayer {
         .map(({ sprite }) => sprite);
       // What is not of the body (ripples, a shadow) goes at once, and a sunk body's legs.
       for (const ring of creature.ripples ?? []) ring.visible = false;
+      creature.hat.visible = false;
       for (const { sprite, alpha } of creature.paints) if (alpha < 1) sprite.visible = false;
       if (how.sinks) for (const sprite of legs) sprite.visible = false;
       this.departing.push({
@@ -1610,6 +1629,7 @@ export class CreatureLayer {
     this.fresh = false;
     this.ticks += 1;
     const lived = dtS;
+    const hats = isChristmasActive() && this.showing === "bodies";
     for (let index = 0; index < this.active; index++) {
       const creature = this.creatures[index];
       if (creature === undefined) continue;
@@ -1685,6 +1705,7 @@ export class CreatureLayer {
         creature.arriving.age += dtS;
         this.materialise(creature);
       }
+      creature.hat.visible = hats;
       if (creature.inView !== inView) {
         creature.inView = inView;
         this.reveal(creature, index);
@@ -1860,6 +1881,9 @@ export class CreatureLayer {
       return container.addChild(sprite);
     });
 
+    const hat = this.hatFor(plan.radii[0] ?? 0);
+    container.addChild(hat);
+
     const stiff = stiffness(plan.kind, plan.joints, plan.spacing);
     // The dot that stands for it on the map: its colour, with a dark edge.
     const marker = new Container();
@@ -1927,6 +1951,7 @@ export class CreatureLayer {
       striding: 0,
       unsettled: true,
       sprites,
+      hat,
       legs,
       inView: true,
       lag: 0,
@@ -1934,6 +1959,33 @@ export class CreatureLayer {
       posed: null,
       over: null,
     };
+  }
+
+  /**
+   * A Santa hat for a head of `radius` cells, its brim's middle at (0, 0): a red cone
+   * leaning a little, a white brim and a white pom-pom at its tip, of the atlas's shapes.
+   */
+  private hatFor(radius: number): Container {
+    const hat = new Container();
+    const lean = -Math.PI / 2 + HAT_LEAN;
+    const tall = HAT_TALL * radius;
+    const cone = new Sprite({ texture: this.atlas.wedge, anchor: { x: 0, y: 0.5 } });
+    cone.tint = HAT_RED;
+    cone.rotation = lean;
+    cone.scale.set(tall / DISC_SIZE, (HAT_WIDE * radius) / DISC_SIZE);
+    const brim = new Sprite({ texture: this.atlas.white, anchor: 0.5 });
+    brim.tint = HAT_WHITE;
+    brim.scale.set(
+      (HAT_BRIM_WIDE * radius) / WHITE_TEXELS,
+      (HAT_BRIM_DEEP * radius) / WHITE_TEXELS,
+    );
+    const pom = new Sprite({ texture: this.atlas.disc, anchor: 0.5 });
+    pom.tint = HAT_WHITE;
+    pom.scale.set((HAT_POM * radius) / DISC_SIZE);
+    pom.position.set(Math.cos(lean) * tall, Math.sin(lean) * tall);
+    hat.addChild(cone, brim, pom);
+    hat.visible = false;
+    return hat;
   }
 
   /** Colour a swimmer as seen through the water at its head, when that water changes. */
@@ -2304,6 +2356,11 @@ export class CreatureLayer {
         const deeper = BREATH_WIDENS * breathDepth(creature.sleep);
         sprite.scale.y = (part.across / texels) * (1 + deeper * full) * widens;
       }
+    }
+    const top = joints[0];
+    if (top !== undefined) {
+      const radius = plan.radii[0] ?? 0;
+      creature.hat.position.set(top.x, top.y - HAT_ABOVE * radius * low * lowers);
     }
     for (const leg of creature.legs) this.walk(creature, leg);
     if (moved) {
