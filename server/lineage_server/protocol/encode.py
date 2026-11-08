@@ -118,6 +118,8 @@ def fauna_message(world: World) -> Message:
 
 # How finely a young creature's growth is sent: sixteenths of the way to coming of age.
 YOUNG_STEPS = 16
+# Energy comes in sixteenths of a full reserve (`energy` on the wire).
+ENERGY_STEPS = 16
 
 
 def creatures_message(
@@ -202,6 +204,17 @@ def creatures_message(
         message["young"] = [
             [ident, int(steps[row])] for row, ident in enumerate(ids) if steps[row] < YOUNG_STEPS
         ]
+    # How full each is (the Health Bars mod): energy over its body's capacity, in sixteenths,
+    # one per id (0: nearly starved, 15: full).
+    energy = getattr(fauna, "energy", None)
+    capacity = getattr(getattr(fauna, "body", None), "capacity", None)
+    if energy is not None and capacity is not None:
+        share = np.asarray(energy, dtype=np.float64) / np.maximum(
+            np.asarray(capacity, dtype=np.float64), 1e-9
+        )
+        message["energy"] = (
+            np.clip(np.floor(share * ENERGY_STEPS), 0, ENERGY_STEPS - 1).astype(int).tolist()
+        )
     if died:
         message["died"] = died
     if landed:

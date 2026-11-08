@@ -415,3 +415,29 @@ def test_the_schema_knows_the_causes_of_death() -> None:
     assert errors({**message, "young": [[1]]}, SCHEMA)
     for cause in [death.name.lower() for death in Death] + ["blast"]:
         assert errors({**message, "died": [{"id": 1, "cause": cause}]}, SCHEMA) == [], cause
+
+
+def test_the_energy_of_each_in_sixteenths() -> None:
+    import types
+
+    world = _stand_in([4, 5, 6, 7])
+    world.fauna.energy = np.array([0.0, 5.0, 9.99, 20.0], dtype=np.float32)
+    world.fauna.body = types.SimpleNamespace(capacity=np.array([10.0, 10.0, 10.0, 10.0]))
+    message = encode.creatures_message(world)
+    assert errors(message, SCHEMA) == []
+    assert message["energy"] == [0, 8, encode.ENERGY_STEPS - 1, encode.ENERGY_STEPS - 1]
+    # A fauna without energy sends none.
+    assert "energy" not in encode.creatures_message(_stand_in([1]))
+
+
+def test_the_real_fauna_sends_its_energy() -> None:
+    config = parse_config(CONFIG.read_text(encoding="utf-8"))
+    world = World.restore(config, io.loads(SAVE.read_bytes()))
+    message = encode.creatures_message(world)
+    assert errors(message, SCHEMA) == []
+    fauna = world.fauna
+    assert len(message["energy"]) == len(message["ids"])
+    share = fauna.energy / fauna.body.capacity
+    expected = np.clip(np.floor(share * encode.ENERGY_STEPS), 0, encode.ENERGY_STEPS - 1)
+    assert message["energy"] == expected.astype(int).tolist()
+    assert len(set(message["energy"])) > 1  # a living herd is not all of one fullness

@@ -116,6 +116,8 @@ export class Roster {
   readonly food = new Map<number, "plants" | "meat">();
   /** The young by id: how far grown toward coming of age, in sixteenths (R5); the rest are grown. */
   readonly young = new Map<number, number>();
+  /** How full each is, in sixteenths (`energy` on the wire); empty from older streams. */
+  readonly energy = new Map<number, number>();
 
   /** The slot of animal `id`, if it lives. */
   slotOf(id: number): number | undefined {
@@ -149,6 +151,7 @@ export class Roster {
     for (const id of message.grazing ?? []) this.food.set(id, "plants");
     for (const id of message.feeding ?? []) this.food.set(id, "meat");
     this.young.clear();
+    this.energy.clear();
     for (const [id, steps] of message.young ?? []) {
       if (id !== undefined && steps !== undefined) this.young.set(id, steps);
     }
@@ -157,6 +160,8 @@ export class Roster {
       const [x, y] = message.positions[index] ?? [0, 0];
       this.where.set(id, { x, y });
       this.species.set(id, message.species?.[index] ?? 0);
+      const full = message.energy?.[index];
+      if (full !== undefined) this.energy.set(id, full);
       // An animal whose genome never came cannot be drawn (it should not happen).
       if (this.slots.has(id) || !this.genomes.has(id)) return;
       const slot = this.free.shift() ?? this.next++;
@@ -1046,12 +1051,15 @@ export class Herd {
       const slot = this.roster.slotOf(id);
       if (slot === undefined || !layer.has(slot)) continue;
       const at = layer.centre(slot);
+      const energy = this.roster.energy.get(id);
       subjects.push({
         id,
         species: this.roster.species.get(id) ?? 0,
         x: at.x,
         y: at.y,
         torpid: this.roster.torpid.has(id),
+        ...(energy === undefined ? {} : { energy }),
+        ...(layer.fighting(slot) ? { fighting: true } : {}),
       });
     }
     this.subjectsKept = subjects;

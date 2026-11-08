@@ -814,6 +814,16 @@ export class CreatureLayer {
     return this.creatures[index]?.venomous === true;
   }
 
+  /**
+   * Whether slot `index`'s animal is in a fight: facing a rival or backing away from one
+   * (the packs' face-offs, `pack.ts`), or running down its prey (`hunting.ts`).
+   */
+  fighting(index: number): boolean {
+    const creature = this.creatures[index];
+    if (creature === undefined) return false;
+    return creature.pack.stare > 0 || creature.pack.retreats || creature.hunt !== undefined;
+  }
+
   /** Whether slot `index` holds a creature. */
   has(index: number): boolean {
     return this.creatures[index] !== undefined;

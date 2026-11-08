@@ -97,6 +97,10 @@ export interface Subject {
   x: number;
   y: number;
   torpid: boolean;
+  /** How full its energy is, in sixteenths (0 nearly starved, 15 full); absent if not told. */
+  energy?: number;
+  /** In a fight now: a face-off between packs, backing away from one, or a hunt. */
+  fighting?: boolean;
 }
 
 /** What the director reads of the scene each frame. */

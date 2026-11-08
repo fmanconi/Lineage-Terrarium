@@ -197,6 +197,10 @@ export interface CreaturesMessage {
    */
   young?: [number, number][];
   /**
+   * How full each of `ids` is, in the same order: its energy over its body's capacity, in sixteenths (0 nearly starved, 15 full). Drawn by the Health Bars mod. Absent from streams recorded before.
+   */
+  energy?: number[];
+  /**
    * The creatures sent before that died since the last creatures message, and of what (R5): starved, old_age, killed (by a hunter), drowned, burnt (in a fire) or blast (a meteor, a cone or crater rising under it). Absent when none died, and from streams recorded before R5's deaths.
    */
   died?: {
