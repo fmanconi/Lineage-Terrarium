@@ -3,12 +3,14 @@
  *
  * Procedural, zero-dependency environmental sound engine powered by the Web Audio API.
  * Synthesizes living soundscapes purely in real-time code without loading any external audio files:
- *   1. Wind & Sea Breeze: Pink noise loop modulated through resonant biquad bandpass filters.
- *   2. Ocean Surf: Low-frequency rolling surf swell envelope against coastal land.
- *   3. Dynamic Weather: Rain hiss dynamically scaling with `rain` (0..1) and thunder rumbles on storm events.
- *   4. Emergent Biophony: Procedural bio-chirps, clicks and trills generated as emergent wildlife
- *      acoustic activity, scaling with active animal population and shifting between day and night.
+ *   1. Cozy Biome Drone: Warm, comforting harmonic sub-drone (open fifths / gentle chords) giving
+ *      a peaceful, living presence to the terrarium without any harsh synthetic buzz.
+ *   2. Ocean Surf & Breeze: Brownian low-frequency swell with organic breathing envelope and warm lowpass.
+ *   3. Dynamic Weather: Gentle rain bed with procedural organic water plinks on leaves and rolling thunder.
+ *   4. Emergent Biophony: Natural avian songbird glissandos and gentle night cricket trills scaling
+ *      with animal population.
  *
+ * Zero white-noise hiss: calibrated for cozy, relaxing ambient listening.
  * Runs cleanly in browser, kiosk and pywebview. Headless / test-safe fallback when AudioContext is absent.
  * Renderer-only: zero impact on `sim/` determinism.
  */
@@ -97,12 +99,16 @@ export interface OscillatorLike {
 export class BiophonyEngine {
   private ctx: AudioContextLike | null = null;
   private masterGain: GainNodeLike | null = null;
+  private droneGain: GainNodeLike | null = null;
   private windGain: GainNodeLike | null = null;
   private windFilter: BiquadFilterLike | null = null;
   private rainGain: GainNodeLike | null = null;
+  private rainFilter: BiquadFilterLike | null = null;
   private settings: BiophonySettings = { volume: 0.45, muted: false };
   private storage: StorageLike | null = null;
   private chirpCooldownS = 0;
+  private dropCooldownS = 0;
+  private swellPhase = 0;
   /** Seconds until the next thunder may rumble (0: it may now). */
   thunderCooldownS = 0;
   private isNight = false;
@@ -192,36 +198,48 @@ export class BiophonyEngine {
       this.applyMasterGain();
       this.masterGain.connect(this.ctx.destination);
 
-      // 1. Wind & breeze node setup
-      this.windGain = this.ctx.createGain();
-      this.windGain.gain.value = 0.15;
-      this.windFilter = this.ctx.createBiquadFilter();
-      this.windFilter.type = "bandpass";
-      this.windFilter.frequency.value = 400;
-      this.windFilter.Q.value = 1.2;
+      // 1. Cozy Biome Drone (warm, continuous ambient chord)
+      this.droneGain = this.ctx.createGain();
+      this.droneGain.gain.value = 0.04;
+      const droneBuffer = this.createWarmDroneBuffer(this.ctx, 4.0);
+      const droneSource = this.ctx.createBufferSource();
+      droneSource.buffer = droneBuffer;
+      droneSource.loop = true;
+      droneSource.connect(this.droneGain);
+      this.droneGain.connect(this.masterGain);
+      droneSource.start(0);
 
-      const pinkNoise = this.createPinkNoiseBuffer(this.ctx, 2.0);
+      // 2. Gentle Wind & Surf Swell (warm brownian noise with lowpass filter)
+      this.windGain = this.ctx.createGain();
+      this.windGain.gain.value = 0.035;
+      this.windFilter = this.ctx.createBiquadFilter();
+      this.windFilter.type = "lowpass";
+      this.windFilter.frequency.value = 140;
+      this.windFilter.Q.value = 0.7;
+
+      const brownNoise = this.createBrownNoiseBuffer(this.ctx, 3.0);
       const windSource = this.ctx.createBufferSource();
-      windSource.buffer = pinkNoise;
+      windSource.buffer = brownNoise;
       windSource.loop = true;
       windSource.connect(this.windFilter);
       this.windFilter.connect(this.windGain);
       this.windGain.connect(this.masterGain);
       windSource.start(0);
 
-      // 2. Rain node setup
+      // 3. Gentle Rain (soft bandpassed rainfall texture)
       this.rainGain = this.ctx.createGain();
       this.rainGain.gain.value = 0.0;
-      const rainFilter = this.ctx.createBiquadFilter();
-      rainFilter.type = "highpass";
-      rainFilter.frequency.value = 1200;
+      this.rainFilter = this.ctx.createBiquadFilter();
+      this.rainFilter.type = "bandpass";
+      this.rainFilter.frequency.value = 650;
+      this.rainFilter.Q.value = 0.9;
 
-      const rainNoise = this.createWhiteNoiseBuffer(this.ctx, 1.5);
+      const rainNoise = this.createPinkNoiseBuffer(this.ctx, 2.0);
       const rainSource = this.ctx.createBufferSource();
       rainSource.buffer = rainNoise;
       rainSource.loop = true;
-      rainSource.connect(rainFilter);
-      rainFilter.connect(this.rainGain);
+      rainSource.connect(this.rainFilter);
+      this.rainFilter.connect(this.rainGain);
       this.rainGain.connect(this.masterGain);
       rainSource.start(0);
     } catch {
@@ -229,6 +247,74 @@ export class BiophonyEngine {
     }
   }
 
+  /**
+   * Generates a warm, zero-hiss procedural chord in open D (D2, D3, A3, D4, E4).
+   * Exact integer multiples of 0.25 Hz guarantee seamless, click-free 4.0s looping.
+   */
+  private createWarmDroneBuffer(ctx: AudioContextLike, durationS: number): AudioBufferLike {
+    const samples = Math.floor(ctx.sampleRate * durationS);
+    const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    const twoPi = Math.PI * 2;
+    const invRate = 1.0 / ctx.sampleRate;
+
+    // Harmonic frequencies in open D
+    const f1 = 73.5; // D2 (deep warm fundamental)
+    const f2 = 147.0; // D3 (warm body)
+    const f3 = 220.5; // A3 (open fifth, airy clarity)
+    const f4 = 294.0; // D4 (soft top octave)
+    const f5 = 330.0; // E4 (ninth, contemplative color)
+
+    for (let i = 0; i < samples; i++) {
+      const t = i * invRate;
+      // Ultra-slow sub-modulation for living drift
+      const a1 = 0.35 + 0.04 * Math.sin(twoPi * 0.25 * t);
+      const a2 = 0.30 + 0.03 * Math.sin(twoPi * 0.5 * t + 1.2);
+      const a3 = 0.18 + 0.02 * Math.sin(twoPi * 0.25 * t + 2.4);
+      const a4 = 0.10 + 0.02 * Math.sin(twoPi * 0.75 * t + 0.8);
+      const a5 = 0.07 + 0.01 * Math.sin(twoPi * 0.5 * t + 3.1);
+
+      data[i] =
+        (a1 * Math.sin(twoPi * f1 * t) +
+          a2 * Math.sin(twoPi * f2 * t) +
+          a3 * Math.sin(twoPi * f3 * t) +
+          a4 * Math.sin(twoPi * f4 * t) +
+          a5 * Math.sin(twoPi * f5 * t)) *
+        0.24;
+    }
+    return buffer;
+  }
+
+  /**
+   * Generates soft Brownian (red) noise via leaky integration.
+   * Deep and smooth without high-frequency harshness, simulating organic wind and sea surf.
+   */
+  private createBrownNoiseBuffer(ctx: AudioContextLike, durationS: number): AudioBufferLike {
+    const samples = Math.floor(ctx.sampleRate * durationS);
+    const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let lastOut = 0.0;
+
+    for (let i = 0; i < samples; i++) {
+      const white = Math.random() * 2 - 1;
+      lastOut = (lastOut + 0.02 * white) / 1.02;
+      data[i] = lastOut * 2.8;
+    }
+
+    // Smooth boundary crossfade to avoid loop seams
+    const fadeSamples = Math.min(2048, Math.floor(samples / 4));
+    for (let i = 0; i < fadeSamples; i++) {
+      const alpha = i / fadeSamples;
+      const startVal = data[i] ?? 0;
+      const endVal = data[samples - 1 - (fadeSamples - 1 - i)] ?? 0;
+      data[i] = startVal * alpha + endVal * (1 - alpha);
+    }
+    return buffer;
+  }
+
+  /**
+   * Pink noise buffer (1/f) for rainfall texture.
+   */
   private createPinkNoiseBuffer(ctx: AudioContextLike, durationS: number): AudioBufferLike {
     const samples = Math.floor(ctx.sampleRate * durationS);
     const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
@@ -249,23 +335,41 @@ export class BiophonyEngine {
       b3 = 0.8665 * b3 + white * 0.3104856;
       b4 = 0.55 * b4 + white * 0.5329522;
       b5 = -0.7616 * b5 - white * 0.016898;
-      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.08;
       b6 = white * 0.115926;
     }
     return buffer;
   }
 
-  private createWhiteNoiseBuffer(ctx: AudioContextLike, durationS: number): AudioBufferLike {
-    const samples = Math.floor(ctx.sampleRate * durationS);
-    const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < samples; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.2;
+  /**
+   * Trigger a gentle water droplet plink when raining on foliage or sea.
+   */
+  private triggerWaterDrop(): void {
+    if (!this.ctx || !this.masterGain || this.settings.muted) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const now = this.ctx.currentTime;
+      osc.type = "sine";
+      const startFreq = 950 + Math.random() * 380;
+      const endFreq = startFreq * 0.62;
+      osc.frequency.setValueAtTime(startFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), now + 0.028);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.022, now + 0.003);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.032);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.035);
+    } catch {
+      // Audio safety
     }
-    return buffer;
   }
 
-  /** Trigger a procedural micro-chirp */
+  /** Trigger an emergent, melodic bird chirp or cozy nocturnal cricket trill */
   triggerChirp(): void {
     if (!this.ctx || !this.masterGain || this.settings.muted) return;
     try {
@@ -274,28 +378,34 @@ export class BiophonyEngine {
       const now = this.ctx.currentTime;
 
       if (this.isNight) {
-        // Nocturnal cricket chirp
+        // Nocturnal cricket / katydid soft trill
         osc.type = "triangle";
-        osc.frequency.setValueAtTime(3800, now);
-        gain.gain.setValueAtTime(0.04, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        osc.frequency.setValueAtTime(4200, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.025, now + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start(now);
-        osc.stop(now + 0.045);
+        osc.stop(now + 0.04);
       } else {
-        // Diurnal bird / insect micro-trill
+        // Diurnal songbird melodious chirp (smooth melodic sweep without clicks)
         osc.type = "sine";
-        const startFreq = 2200 + Math.random() * 800;
-        const endFreq = startFreq + (Math.random() - 0.5) * 600;
+        const startFreq = 2100 + Math.random() * 500;
+        const peakFreq = startFreq + 320 + Math.random() * 180;
+        const endFreq = startFreq - 120;
         osc.frequency.setValueAtTime(startFreq, now);
-        osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.05);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+        osc.frequency.exponentialRampToValueAtTime(peakFreq, now + 0.04);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(100, endFreq), now + 0.12);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.04, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start(now);
-        osc.stop(now + 0.06);
+        osc.stop(now + 0.14);
       }
     } catch {
       // Audio error safety
@@ -324,7 +434,8 @@ export class BiophonyEngine {
       osc.frequency.setValueAtTime(65, now);
       osc.frequency.exponentialRampToValueAtTime(30, now + 1.2);
 
-      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.03);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
 
       osc.connect(gain);
@@ -342,17 +453,31 @@ export class BiophonyEngine {
     this.thunderCooldownS = Math.max(0, this.thunderCooldownS - dtS);
     this.isNight = isNight;
     this.animalCount = animalCount;
+    this.swellPhase += dtS * 0.35;
 
-    // Modulate rain gain smoothly
-    if (this.rainGain && this.ctx) {
-      const targetRain = Math.min(0.35, rain * 0.35);
-      this.rainGain.gain.setValueAtTime(targetRain, this.ctx.currentTime);
+    // Organic ocean surf / breeze swell cycle (approx 18-second breathing period)
+    const swell = 0.75 + 0.25 * Math.sin(this.swellPhase);
+
+    // Modulate wind gain and lowpass filter naturally
+    if (this.windGain && this.windFilter && this.ctx) {
+      const targetGain = Math.min(0.08, (0.02 + 0.025 * windSpeed) * swell);
+      this.windGain.gain.setValueAtTime(targetGain, this.ctx.currentTime);
+      const targetFreq = 110 + Math.min(180, windSpeed * 60);
+      this.windFilter.frequency.setValueAtTime(targetFreq, this.ctx.currentTime);
     }
 
-    // Modulate wind cutoff frequency with breeze
-    if (this.windFilter && this.ctx) {
-      const targetFreq = 300 + Math.min(600, windSpeed * 200);
-      this.windFilter.frequency.setValueAtTime(targetFreq, this.ctx.currentTime);
+    // Modulate soft rain gain and spawn gentle droplets
+    if (this.rainGain && this.ctx) {
+      const targetRain = Math.min(0.09, rain * 0.09);
+      this.rainGain.gain.setValueAtTime(targetRain, this.ctx.currentTime);
+
+      if (rain > 0.05 && !this.settings.muted) {
+        this.dropCooldownS -= dtS;
+        if (this.dropCooldownS <= 0) {
+          this.triggerWaterDrop();
+          this.dropCooldownS = Math.max(0.12, 0.45 - rain * 0.3) + Math.random() * 0.18;
+        }
+      }
     }
 
     // Spawn random biophony chirps when creatures are active
@@ -360,9 +485,9 @@ export class BiophonyEngine {
       this.chirpCooldownS -= dtS;
       if (this.chirpCooldownS <= 0) {
         this.triggerChirp();
-        // Cooldown between 1.5s and 5s, inversely proportional to animal count
-        const base = Math.max(1.2, 5.0 - Math.min(3.5, this.animalCount * 0.15));
-        this.chirpCooldownS = base + Math.random() * 2.0;
+        // Cooldown between 1.5s and 5.5s, inversely proportional to animal count
+        const base = Math.max(1.5, 5.5 - Math.min(3.8, this.animalCount * 0.15));
+        this.chirpCooldownS = base + Math.random() * 2.2;
       }
     }
   }
