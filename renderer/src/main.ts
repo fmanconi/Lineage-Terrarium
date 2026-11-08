@@ -131,7 +131,6 @@ import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { FormicariumMod } from "./mods/builtin/formicarium";
-import { MiniatureBadge, MiniatureManager, MiniatureToolbar } from "./miniature";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -295,14 +294,6 @@ declare global {
     pywebview?: {
       api?: {
         toggle_fullscreen?: () => Promise<boolean>;
-        toggle_miniature?: (
-          width: number,
-          height: number,
-          opacity: number,
-        ) => Promise<{ active: boolean; opacity: number; width: number; height: number }>;
-        set_opacity?: (alpha: number) => Promise<number>;
-        resize_window?: (width: number, height: number) => Promise<{ width: number; height: number }>;
-        set_on_top?: (onTop: boolean) => Promise<boolean>;
       };
     };
   }
@@ -445,17 +436,12 @@ async function start(): Promise<void> {
   mods.register(xlScale);
   mods.register(new FormicariumMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
-  const miniature = new MiniatureManager(modStorage);
-  const miniatureBadge = new MiniatureBadge(miniature, WIDTH, HEIGHT);
-  const miniatureToolbar = new MiniatureToolbar(miniature, canvas, WIDTH, HEIGHT);
   frame.append(
     captions.element,
     card.element,
     fieldGuide.element,
     keyBar.element,
     modMenu.element,
-    miniatureBadge.element,
-    miniatureToolbar.element,
   );
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
@@ -850,8 +836,41 @@ async function start(): Promise<void> {
     }
   };
 
+  let isPiP = false;
+  let pipVideo: HTMLVideoElement | null = null;
+
   const togglePiP = async (): Promise<void> => {
-    await miniature.toggle(canvas);
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        isPiP = false;
+        return;
+      }
+      if (!pipVideo) {
+        pipVideo = document.createElement("video");
+        pipVideo.muted = true;
+        pipVideo.playsInline = true;
+        pipVideo.autoplay = true;
+        const captureCanvas = canvas as HTMLCanvasElement & {
+          captureStream?: (fps: number) => MediaStream;
+        };
+        const stream = captureCanvas.captureStream?.(30);
+        if (!stream) {
+          console.warn("Canvas captureStream not supported in this environment");
+          return;
+        }
+        pipVideo.srcObject = stream;
+        await pipVideo.play();
+        pipVideo.addEventListener("leavepictureinpicture", () => {
+          isPiP = false;
+        });
+      }
+      await pipVideo.requestPictureInPicture();
+      isPiP = true;
+    } catch (err) {
+      console.warn("Could not toggle Picture-in-Picture:", err);
+      isPiP = false;
+    }
   };
 
   const takeSnapshot = (): void => {
@@ -880,26 +899,6 @@ async function start(): Promise<void> {
     if (event.key === "p" || event.key === "P") {
       event.preventDefault();
       void togglePiP();
-      return;
-    }
-    if (event.key === "[" || event.key === "]") {
-      event.preventDefault();
-      void miniature.adjustOpacity(event.key === "[" ? -0.1 : 0.1, canvas);
-      return;
-    }
-    if (event.key === "0" && (miniature.isActive() || miniature.getOpacity() < 1.0)) {
-      event.preventDefault();
-      void miniature.setOpacity(1.0, canvas);
-      return;
-    }
-    if ((event.key === "-" || event.key === "_") && miniature.isActive()) {
-      event.preventDefault();
-      void miniature.adjustSize(-1, canvas);
-      return;
-    }
-    if ((event.key === "+" || event.key === "=") && miniature.isActive()) {
-      event.preventDefault();
-      void miniature.adjustSize(1, canvas);
       return;
     }
     if (event.key === "c" || event.key === "C") {
@@ -957,7 +956,6 @@ async function start(): Promise<void> {
     lastPtr = { x: event.clientX, y: event.clientY };
     if (!automatedRun) {
       keyBar.wake();
-      miniatureToolbar.wake();
     }
   });
 
@@ -965,11 +963,9 @@ async function start(): Promise<void> {
   frame.addEventListener("pointerdown", (event) => {
     userInteracted = true;
     keyBar.wake();
-    miniatureToolbar.wake();
     const rect = frame.getBoundingClientRect();
     const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
     const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
-    if (miniatureToolbar.handlePointer(artX, artY)) return;
     if (modMenu.handlePointer(artX, artY)) return;
     const barHit = dashboardMod.hitAt(artX, artY);
     if (barHit !== null) {
@@ -999,18 +995,11 @@ async function start(): Promise<void> {
 
   let currentNightAlpha = settings.sleepMode ? nightVeilAlpha(1, settings.nightDimmer, true) : 0;
   let shot: Shot = { view: pinned ?? "map", centre: { x: 0, y: 0 }, dim: 0, subject: null };
-  // The mouse wheel zooms the local view in and out (Terrarium XL's macro zoom) or tunes miniature.
+  // The mouse wheel zooms the local view in and out (Terrarium XL's macro zoom).
   frame.addEventListener(
     "wheel",
     (event) => {
       if (modMenu.isOpen() || fieldGuide.open) return;
-      const rect = frame.getBoundingClientRect();
-      const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
-      const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
-      if (miniatureToolbar.handleWheel(event, artX, artY)) {
-        event.preventDefault();
-        return;
-      }
       if (xlScale.onWheel(event.deltaY, shot.view)) event.preventDefault();
     },
     { passive: false },
@@ -1441,7 +1430,7 @@ async function start(): Promise<void> {
       ...(miracleDot === undefined ? {} : { miracleDot }),
       sleepMode: settings.sleepMode,
       fullscreen: isFullscreen,
-      pip: miniature.isActive(),
+      pip: isPiP,
       scrollShowing,
       lamp,
     };
@@ -1474,9 +1463,6 @@ async function start(): Promise<void> {
     };
     mods.dispatchUpdate(dtS, modOptions);
     modMenu.update(dtS, lamp);
-    miniature.update(dtS);
-    miniatureBadge.update(dtS);
-    miniatureToolbar.update(dtS);
 
     if (showcase !== null && overlay !== null) {
       const { act } = showcase.now;

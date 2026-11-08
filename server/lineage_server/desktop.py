@@ -80,15 +80,26 @@ def _apply_native_form_decorations(form: Any) -> None:
     _set_form_prop(form, "ShowInTaskbar", True)
 
 
+def _apply_window_decorations(window: Any) -> None:
+    """Apply native taskbar icon and styles to the WinForms window instance."""
+    if window is None:
+        return
+    try:
+        from webview.platforms.winforms import BrowserView
+
+        form = BrowserView.instances.get(window.uid)
+        if form is not None:
+            _apply_native_form_decorations(form)
+    except Exception:
+        pass
+
+
 class DesktopApi:
     """JavaScript bridge exposed at ``window.pywebview.api`` inside the game window."""
 
     def __init__(self, initial_fullscreen: bool = False) -> None:
         self._window: Any = None
         self._fullscreen = initial_fullscreen
-        self._miniature = False
-        self._saved_size: tuple[int, int] = (1366, 820)
-        self._opacity: float = 1.0
 
     def is_desktop(self) -> bool:
         return True
@@ -99,88 +110,6 @@ class DesktopApi:
         self._window.toggle_fullscreen()
         self._fullscreen = not self._fullscreen
         return self._fullscreen
-
-    def _get_form(self) -> Any:
-        if self._window is None:
-            return None
-        try:
-            from webview.platforms.winforms import BrowserView
-
-            form = BrowserView.instances.get(self._window.uid)
-            if form is not None:
-                _apply_native_form_decorations(form)
-            return form
-        except Exception:
-            return None
-
-    def set_opacity(self, alpha: float) -> float:
-        """Set window opacity (0.15 .. 1.0). Works natively on Windows (WinForms / WebView2)."""
-        self._opacity = max(0.15, min(1.0, float(alpha)))
-        form = self._get_form()
-        if form is not None:
-            _set_form_prop(form, "Opacity", self._opacity)
-        return self._opacity
-
-    def get_opacity(self) -> float:
-        return self._opacity
-
-    def set_on_top(self, on_top: bool) -> bool:
-        """Keep the window pinned always on top of all other windows."""
-        target = bool(on_top)
-        if self._window is not None:
-            with suppress(Exception):
-                self._window.on_top = target
-        form = self._get_form()
-        if form is not None:
-            _set_form_prop(form, "TopMost", target)
-        return target
-
-    def resize_window(self, width: int, height: int) -> dict[str, int]:
-        """Resize the desktop window to given pixel dimensions."""
-        w = max(200, min(3840, int(width)))
-        h = max(120, min(2160, int(height)))
-        if self._window is not None:
-            with suppress(Exception):
-                self._window.resize(w, h)
-        return {"width": w, "height": h}
-
-    def toggle_miniature(
-        self,
-        width: int = 384,
-        height: int = 224,
-        opacity: float = 0.85,
-    ) -> dict[str, Any]:
-        """Toggle between full desktop window and a floating, translucent miniature companion."""
-        if self._window is None:
-            return {"active": False, "opacity": 1.0, "width": 0, "height": 0}
-
-        self._miniature = not self._miniature
-        if self._miniature:
-            with suppress(Exception):
-                self._saved_size = (int(self._window.width), int(self._window.height))
-
-            self.resize_window(width, height)
-            self.set_on_top(True)
-            self.set_opacity(opacity)
-        else:
-            self.set_opacity(1.0)
-            self.set_on_top(False)
-            self.resize_window(self._saved_size[0], self._saved_size[1])
-
-        return {
-            "active": self._miniature,
-            "opacity": self._opacity,
-            "width": width if self._miniature else self._saved_size[0],
-            "height": height if self._miniature else self._saved_size[1],
-        }
-
-    def get_miniature_state(self) -> dict[str, Any]:
-        return {
-            "active": self._miniature,
-            "opacity": self._opacity,
-            "width": int(self._window.width) if self._window is not None else self._saved_size[0],
-            "height": int(self._window.height) if self._window is not None else self._saved_size[1],
-        }
 
 
 def bootstrap_fast_world(
@@ -486,7 +415,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
 
     window.events.closing += on_closing
     window.events.closed += lambda: (tray.stop() if tray else None, shutdown())
-    window.events.shown += lambda: api._get_form()
+    window.events.shown += lambda: _apply_window_decorations(window)
     try:
         log.info("Starting webview event loop")
         webview.start(debug=False)
