@@ -39,6 +39,7 @@ log = logging.getLogger("lineage_desktop")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GAME_DATA = REPO_ROOT / "data" / "game-fast-life"
 DEFAULT_DIST = REPO_ROOT / "renderer" / "dist-kiosk"
+WINDOW_TITLE = "Lineage: Terrarium"
 
 
 class DesktopApi:
@@ -177,6 +178,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--time-scale", type=float, default=FAST_LIFE_TIME_SCALE)
     parser.add_argument("--years-ahead", type=int, default=400)
     parser.add_argument("--fullscreen", action="store_true", help="open directly in fullscreen")
+    parser.add_argument("--title", default=WINDOW_TITLE, help="the window's title")
     parser.add_argument("--port", type=int, default=8080, help="port to serve on (default: 8080)")
     parser.add_argument(
         "--browser",
@@ -283,7 +285,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
     log.info("Creating pywebview window pointing to %s", url)
     api = DesktopApi(initial_fullscreen=args.fullscreen)
     window = webview.create_window(
-        "Lineage",
+        args.title,
         url,
         width=1366,
         height=820,
