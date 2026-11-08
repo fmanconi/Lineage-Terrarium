@@ -147,7 +147,9 @@ lineage/
 ├── deploy/                   # os notes, systemd units (lineage-r0@, lineage-r5@: the board
 │                             #   benchmarks; lineage-server@: the island, lineage-s1-kiosk@
 │                             #   and s1-board.sh: S1's board session), setup.sh,
-│                             #   kiosk, backups, tailscale
+│                             #   kiosk, backups, tailscale; terrarium-kiosk.sh and the
+│                             #   lineage-terrarium-* units: the screensaver on any Linux
+│                             #   machine (ADR 0025)
 ├── mockups/                  # HTML mockups and enclosure concepts (reference only)
 ├── reports/                  # committed milestone reports (HTML + metrics.json), see §7
 ├── runs/                     # gitignored raw fast-forward output
@@ -245,6 +247,11 @@ Do not create directories outside this layout without updating this file.
     `--seed N`), the time it was off caught up, the kiosk at `http://localhost:8080/`, the
     stream at `/stream`, its numbers at `/status`; keys on stdin play the device (`p`
     presence, `g` god power, `v` view, `l`/`r` power lost/restored); Ctrl+C saves and stops
+  - `deploy/terrarium-kiosk.sh [--data DIR] [--config FILE] [--port N] [--build]` — Lineage:
+    Terrarium as a screensaver on a Linux machine: the server headless with
+    `sim/config/terrarium.toml` (the real solar cycle) and Chromium in kiosk mode
+    (`docs/terrarium-kiosk.md`, ADR 0025); `Lineage-Terrarium.cmd` opens the desktop app on
+    Windows
   - `deploy/s1-board.sh setup|start|status|stop lineage@<board>` — the server and the kiosk
     on the board (procedure in `deploy/README.md`), then `uv run python -m
     tools.server_watch http://<board>:8080 --minutes 180 --out runs/s1-board/status.jsonl`
