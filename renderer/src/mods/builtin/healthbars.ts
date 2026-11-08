@@ -70,7 +70,7 @@ export class HealthBarsMod implements Mod {
     name: "Health Bars",
     version: "1.0.0",
     description:
-      "A pixel-art energy bar over each animal below a third of its reserve, and over every animal in a fight or a hunt: green when well, amber when low, pulsing red when nearly starved.",
+      "An energy bar over animals low on energy, and over animals in a fight or a hunt: green, amber, then red.",
     defaultEnabled: true,
   };
 

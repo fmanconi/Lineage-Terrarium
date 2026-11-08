@@ -1,5 +1,5 @@
 /**
- * Footprints & Game Trails Mod (ADR 0024):
+ * Footprints and Trails Mod (ADR 0024):
  *
  * Simulates transient creature footprints on soil and accumulates long-term "game trails"
  * (beaten paths) across heavily traveled migration corridors.
@@ -214,10 +214,9 @@ export const trailSystem = new TrailSystem();
 export class FootprintsTrailsMod implements Mod {
   readonly meta: ModMetadata = {
     id: "footprints-trails",
-    name: "Footprints & Game Trails",
+    name: "Footprints and Trails",
     version: "1.0.0",
-    description:
-      "Animals leave transient footprints and wear visible dirt trails along heavily traveled migration routes.",
+    description: "Animals leave footprints, and routes they use often wear into paths.",
     defaultEnabled: true,
   };
 

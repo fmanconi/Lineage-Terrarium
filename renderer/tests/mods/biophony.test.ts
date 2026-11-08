@@ -97,7 +97,7 @@ function createMockAudioContext(): AudioContextLike & { logs: string[] } {
   };
 }
 
-describe("Biophony & Soundscape Mod", () => {
+describe("Ambient Sound Mod", () => {
   beforeEach(() => {
     setBiophonyActive(false);
   });
@@ -105,7 +105,7 @@ describe("Biophony & Soundscape Mod", () => {
   it("registers metadata correctly", () => {
     const mod = new BiophonyMod();
     expect(mod.meta.id).toBe("biophony-soundscape");
-    expect(mod.meta.name).toBe("Biophony & Soundscape");
+    expect(mod.meta.name).toBe("Ambient Sound");
     expect(mod.meta.defaultEnabled).toBe(true);
   });
 

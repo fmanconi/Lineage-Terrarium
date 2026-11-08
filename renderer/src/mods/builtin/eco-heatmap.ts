@@ -1,5 +1,5 @@
 /**
- * Eco-Heatmap Overlays Mod (ADR 0024):
+ * Data Overlays Mod (ADR 0024):
  *
  * Real-time ecological diagnostic visualizer for Lineage: Terrarium.
  * Allows switching between specialized diagnostic density maps:
@@ -245,10 +245,9 @@ const BADGE_STEPS = 4;
 export class EcoHeatmapMod implements Mod {
   readonly meta: ModMetadata = {
     id: "eco-heatmap",
-    name: "Eco-Heatmap Overlays",
+    name: "Data Overlays",
     version: "1.0.0",
-    description:
-      "Diagnostic visualizer displaying real-time thematic overlays: vegetation density, creature population, and grazing activity.",
+    description: "Maps over the scene of plant cover, animal numbers and grazing.",
     defaultEnabled: false,
   };
 

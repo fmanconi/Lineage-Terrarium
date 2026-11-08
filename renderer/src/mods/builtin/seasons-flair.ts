@@ -1,5 +1,5 @@
 /**
- * Seasonal Foliage & Blossoms Mod (ADR 0024):
+ * Seasonal Details Mod (ADR 0024):
  *
  * Enriches the visual transitions between the four seasons:
  *   - Spring: Drifting cherry blossom petals (delicate pink & white) and floating golden pollen.
@@ -221,10 +221,9 @@ export const seasonalFlairSystem = new SeasonalFlairSystem();
 export class SeasonalFlairMod implements Mod {
   readonly meta: ModMetadata = {
     id: "seasons-flair",
-    name: "Seasonal Foliage & Blossoms",
+    name: "Seasonal Details",
     version: "1.0.0",
-    description:
-      "Dynamic seasonal aesthetics: autumn leaf-fall cascades, spring blossom petals, and summer warmth.",
+    description: "Falling leaves in autumn, petals in spring, warmer light in summer.",
     defaultEnabled: true,
   };
 

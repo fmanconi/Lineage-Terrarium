@@ -22,7 +22,7 @@ function modIn(view: string, storage: StorageLike = memoryStorage()): XlScaleMod
   return mod;
 }
 
-describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
+describe("Close Zoom and Body Sizes", () => {
   beforeEach(() => {
     setXlScaleActive(false);
   });
@@ -30,7 +30,7 @@ describe("Terrarium XL: Macro Zoom & Apex Ecology", () => {
   it("registers its metadata", () => {
     const mod = new XlScaleMod();
     expect(mod.meta.id).toBe("xl-scale");
-    expect(mod.meta.name).toBe("Terrarium XL: Macro Zoom & Apex Ecology");
+    expect(mod.meta.name).toBe("Close Zoom and Body Sizes");
     expect(mod.meta.version).toBe("1.0.0");
     expect(mod.meta.defaultEnabled).toBe(true);
   });

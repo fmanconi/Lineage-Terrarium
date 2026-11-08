@@ -1,5 +1,5 @@
 /**
- * Biophony & Soundscape Mod (ADR 0024):
+ * Ambient Sound Mod (ADR 0024):
  *
  * Procedural, zero-dependency environmental sound engine powered by the Web Audio API.
  * Synthesizes living soundscapes purely in real-time code without loading any external audio files:
@@ -569,10 +569,10 @@ export const biophonyEngine = new BiophonyEngine();
 export class BiophonyMod implements Mod {
   readonly meta: ModMetadata = {
     id: "biophony-soundscape",
-    name: "Biophony & Soundscape",
+    name: "Ambient Sound",
     version: "1.0.0",
     description:
-      "Procedural environmental audio: warm terrarium drone, surf, rain, chirps. Controls: [U] Mute, [-]/[+] Level, [0] Default.",
+      "Sound from the scene: wind, surf, rain and the animals. U mutes, - and + set the volume, 0 resets it.",
     defaultEnabled: true,
   };
 

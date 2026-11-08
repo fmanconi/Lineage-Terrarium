@@ -1,5 +1,5 @@
 /**
- * The fourth mod (ADR 0024): Pack, Colonies & Territorial Warfare. On, animals of one
+ * The fourth mod (ADR 0024): Packs and Rivals. On, animals of one
  * species near each other stroll as a pack, a pack of four or more keeps a nest at its
  * middle (drawn on the ground), and animals of two species meeting face off: sparks fly
  * and the side with fewer allies near backs away (`creatures/pack.ts`, driven by
@@ -22,10 +22,10 @@ export function isPackWarfareActive(): boolean {
 export class PackWarfareMod implements Mod {
   readonly meta: ModMetadata = {
     id: "pack-warfare",
-    name: "Pack, Colonies & Territorial Warfare",
+    name: "Packs and Rivals",
     version: "1.0.0",
     description:
-      "Swarm & pack cohesion, colony nests, and territorial skirmishes with rival species.",
+      "Animals of a species move together, larger groups keep a nest, and rival species face off.",
     defaultEnabled: true,
   };
 

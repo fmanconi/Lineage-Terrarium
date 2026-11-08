@@ -46,7 +46,7 @@ describe("PurposefulWandererMod", () => {
   it("declares itself on by default", () => {
     const mod = new PurposefulWandererMod();
     expect(mod.meta.id).toBe("purposeful-wanderer");
-    expect(mod.meta.name).toBe("Purposeful Wanderer AI");
+    expect(mod.meta.name).toBe("Steady Walking");
     expect(mod.meta.version).toBe("1.0.0");
     expect(mod.meta.defaultEnabled).toBe(true);
   });

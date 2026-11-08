@@ -1,6 +1,6 @@
 /**
 /**
- * Terrarium XXL: Formicarium & Social Insect Colonies Mod (ADR 0024):
+ * Ant Colonies Mod (ADR 0024):
  *
  * Simulates micro-scale insect societies across the island:
  *   - 3 distinct ant colonies (Formica rufa, Lasius niger, Camponotus ligniperda).
@@ -418,10 +418,10 @@ export const formicariumSystem = new FormicariumSystem();
 export class FormicariumMod implements Mod {
   readonly meta: ModMetadata = {
     id: "formicarium",
-    name: "Terrarium XXL: Formicarium & Social Insect Colonies",
+    name: "Ant Colonies",
     version: "1.0.0",
     description:
-      "Underground ant mounds, pheromone foraging/alarm highways, worker/soldier swarms, and carrion harvesting.",
+      "Ant nests, scent trails between nests and food, workers and soldiers, and carrion carried away.",
     defaultEnabled: true,
   };
 
@@ -627,12 +627,18 @@ export class FormicariumMod implements Mod {
 
           // Animated 6 micro-legs
           const legWiggle = Math.sin(ant.legPhase) * pixel * 0.8;
-          g.rect(ant.x - sin * pixel * 1.5, ant.y + cos * pixel * 1.5 + legWiggle, pixel, pixel).fill(
-            col.antColor,
-          );
-          g.rect(ant.x + sin * pixel * 1.5, ant.y - cos * pixel * 1.5 - legWiggle, pixel, pixel).fill(
-            col.antColor,
-          );
+          g.rect(
+            ant.x - sin * pixel * 1.5,
+            ant.y + cos * pixel * 1.5 + legWiggle,
+            pixel,
+            pixel,
+          ).fill(col.antColor);
+          g.rect(
+            ant.x + sin * pixel * 1.5,
+            ant.y - cos * pixel * 1.5 - legWiggle,
+            pixel,
+            pixel,
+          ).fill(col.antColor);
 
           // Carried leaf snippet or food crumb
           if (ant.carrying !== "none") {

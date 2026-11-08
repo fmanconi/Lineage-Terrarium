@@ -1,5 +1,5 @@
 /**
- * The third mod (ADR 0024): Winter Yule & Christmas Isle. On, snow falls on the whole
+ * The third mod (ADR 0024): Winter Holidays. On, snow falls on the whole
  * island whatever the season or the weather (`atmosphere/atmosphere.ts`), every animal
  * wears a small Santa hat (`creatures/layer.ts`), lights twinkle on the trees and bushes
  * and a winter star shines in the sky at dusk and at night. Drawing only: the sim, its
@@ -22,10 +22,9 @@ export function isChristmasActive(): boolean {
 export class ChristmasMod implements Mod {
   readonly meta: ModMetadata = {
     id: "christmas-yule",
-    name: "Winter Yule & Christmas Isle",
+    name: "Winter Holidays",
     version: "1.0.0",
-    description:
-      "Holiday celebration: gentle snowfall, Santa hats on creatures, twinkling tree lights, and a glowing winter star.",
+    description: "Snowfall, lights on the trees, a star, and hats on the animals.",
     defaultEnabled: true,
   };
 

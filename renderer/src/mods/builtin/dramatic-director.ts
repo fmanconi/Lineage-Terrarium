@@ -1,5 +1,5 @@
 /**
- * Dramatic Director AI (ADR 0024): an intelligent documentary camera director.
+ * Event Camera (ADR 0024): an intelligent documentary camera director.
  *
  * Rather than wandering blindly or lingering for 5 minutes on an idle sleeping creature,
  * this camera actively scans the emergent simulation events and dynamically frames:
@@ -438,10 +438,10 @@ export class DramaticBadge {
 export class DramaticDirectorMod implements Mod {
   readonly meta: ModMetadata = {
     id: "dramatic-director",
-    name: "Dramatic Director AI",
+    name: "Event Camera",
     version: "1.0.0",
     description:
-      "Intelligent documentary camera: dynamically follows births, hunts, pack clashes, deaths, and rare mutations.",
+      "The camera goes to births, hunts, face-offs, deaths and rare genes as they happen.",
     defaultEnabled: true,
   };
 

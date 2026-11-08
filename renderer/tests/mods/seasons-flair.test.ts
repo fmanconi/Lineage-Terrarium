@@ -15,7 +15,7 @@ const ctx: ModContext = {
   storage: memoryStorage(),
 };
 
-describe("Seasonal Foliage & Blossoms Mod", () => {
+describe("Seasonal Details Mod", () => {
   beforeEach(() => {
     seasonalFlairSystem.reset();
     setSeasonalFlairActive(false);
@@ -25,7 +25,7 @@ describe("Seasonal Foliage & Blossoms Mod", () => {
   it("registers metadata correctly", () => {
     const mod = new SeasonalFlairMod();
     expect(mod.meta.id).toBe("seasons-flair");
-    expect(mod.meta.name).toBe("Seasonal Foliage & Blossoms");
+    expect(mod.meta.name).toBe("Seasonal Details");
     expect(mod.meta.defaultEnabled).toBe(true);
   });
 

@@ -15,9 +15,9 @@ export type KeyBarLike = Pick<KeyBar, "element" | "wake" | "hitAt" | "update">;
 export class DashboardButtonsMod implements Mod {
   readonly meta: ModMetadata = {
     id: "dashboard-buttons",
-    name: "Dashboard Buttons",
+    name: "Key Bar",
     version: "1.0.0",
-    description: "Interactive bottom-right button bar with mouse clicks and shortcut hints.",
+    description: "The bar of keys at the bottom right, with buttons that can be clicked.",
     defaultEnabled: true,
   };
   private enabled = false;

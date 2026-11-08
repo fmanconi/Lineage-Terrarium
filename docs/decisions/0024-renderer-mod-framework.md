@@ -1,4 +1,4 @@
-# 0024 — Renderer Mod Framework and Dashboard Buttons Mod
+# 0024 — Renderer Mod Framework and Key Bar Mod
 
 - **Status**: accepted
 - **Date**: 2026-11-08
@@ -22,7 +22,7 @@ Furthermore, future features and community enhancements should be modular, self-
    - Mod states are persisted in browser/desktop local storage (`lineage_mods_state_v1`).
    - Universal hotkey `[M]` toggles the menu at any time.
 
-3. **First Mod: "Dashboard Buttons" (`renderer/src/mods/builtin/dashboard-buttons.ts`)**:
+3. **First Mod: "Key Bar" (`renderer/src/mods/builtin/dashboard-buttons.ts`)**:
    - Encapsulates `keybar.ts` (the bottom-right interactive hints and button bar).
    - Enabled by default for new users.
    - When enabled: renders the keybar, exposes interactive clickable buttons (`View`, `Guide`, `Miracle`, `Full`, `PiP`, `Night`, and a new `[Mods]` button to open the mod menu), and processes pointer clicks.

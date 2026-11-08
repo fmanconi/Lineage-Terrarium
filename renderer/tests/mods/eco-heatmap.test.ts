@@ -17,7 +17,7 @@ const ctx: ModContext = {
   storage: memoryStorage(),
 };
 
-describe("Eco-Heatmap Overlays Mod", () => {
+describe("Data Overlays Mod", () => {
   beforeEach(() => {
     heatmapSystem.reset();
     setHeatmapActive(false);
@@ -26,7 +26,7 @@ describe("Eco-Heatmap Overlays Mod", () => {
   it("registers metadata correctly", () => {
     const mod = new EcoHeatmapMod();
     expect(mod.meta.id).toBe("eco-heatmap");
-    expect(mod.meta.name).toBe("Eco-Heatmap Overlays");
+    expect(mod.meta.name).toBe("Data Overlays");
     expect(mod.meta.defaultEnabled).toBe(false);
   });
 

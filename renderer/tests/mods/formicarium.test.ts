@@ -14,7 +14,7 @@ import { memoryStorage } from "../../src/mods/registry";
 
 const key = (k: string): KeyboardEvent => ({ key: k }) as KeyboardEvent;
 
-describe("Terrarium XXL: Formicarium & Social Insect Colonies", () => {
+describe("Ant Colonies", () => {
   beforeEach(() => {
     setFormicariumActive(false);
     setPheromoneOverlayActive(false);
@@ -24,7 +24,7 @@ describe("Terrarium XXL: Formicarium & Social Insect Colonies", () => {
   it("registers correct metadata", () => {
     const mod = new FormicariumMod();
     expect(mod.meta.id).toBe("formicarium");
-    expect(mod.meta.name).toBe("Terrarium XXL: Formicarium & Social Insect Colonies");
+    expect(mod.meta.name).toBe("Ant Colonies");
     expect(mod.meta.version).toBe("1.0.0");
     expect(mod.meta.defaultEnabled).toBe(true);
   });

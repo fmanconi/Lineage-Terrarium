@@ -1,5 +1,5 @@
 /**
- * The second mod (ADR 0024): Purposeful Wanderer AI. Animals strolling about their anchor
+ * The second mod (ADR 0024): Steady Walking. Animals strolling about their anchor
  * pick a new direction anywhere round it, so they turn on the spot over and over; on,
  * they stroll on ahead within a cone about their heading (`creatures/motion.ts`), turning
  * back only near the end of their leash, and look about only a little while they pause.
@@ -11,10 +11,9 @@ import type { Mod, ModMetadata } from "../types";
 export class PurposefulWandererMod implements Mod {
   readonly meta: ModMetadata = {
     id: "purposeful-wanderer",
-    name: "Purposeful Wanderer AI",
+    name: "Steady Walking",
     version: "1.0.0",
-    description:
-      "Replaces erratic on-the-spot spinning with forward momentum and natural wandering.",
+    description: "Animals walk on ahead instead of turning on the spot.",
     defaultEnabled: true,
   };
 

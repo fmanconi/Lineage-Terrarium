@@ -167,7 +167,7 @@ const OUT_OF_SIGHT_EVERY = 3;
  */
 const POSE_SKIP_EVERY = 3;
 /**
- * The Pack, Colonies & Territorial Warfare mod (`creatures/pack.ts`): the packs are looked
+ * The Packs and Rivals mod (`creatures/pack.ts`): the packs are looked
  * at once in this many seconds, not every frame (every pair of animals is compared).
  */
 const PACK_EVERY_S = 0.2;
@@ -500,7 +500,7 @@ export class CreatureLayer {
   readonly floor = new Container();
   private foam: Sparks | null = null;
   /**
-   * The packs (the Pack, Colonies & Territorial Warfare mod): seconds since they were last
+   * The packs (the Packs and Rivals mod): seconds since they were last
    * looked at, the nests drawn on the floor (made as colonies come), and how the layer
    * answers the packs' questions (made once).
    */
@@ -1779,7 +1779,7 @@ export class CreatureLayer {
   }
 
   /**
-   * The packs (the Pack, Colonies & Territorial Warfare mod, `creatures/pack.ts`), looked
+   * The packs (the Packs and Rivals mod, `creatures/pack.ts`), looked
    * at once every `PACK_EVERY_S`: strolls steered, face-offs played, the nests drawn. Off,
    * the nests are put away.
    */

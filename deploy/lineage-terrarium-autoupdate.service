@@ -1,0 +1,9 @@
+[Unit]
+Description=Lineage: Terrarium, pull and apply updates from GitHub
+Documentation=https://github.com/fmanconi/Lineage-Terrarium
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Lineage-Terrarium
+ExecStart=%h/Lineage-Terrarium/deploy/terrarium-update.sh

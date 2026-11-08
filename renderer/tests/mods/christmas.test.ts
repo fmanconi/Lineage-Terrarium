@@ -23,9 +23,9 @@ describe("ChristmasMod", () => {
   it("declares itself on by default", () => {
     const mod = new ChristmasMod();
     expect(mod.meta.id).toBe("christmas-yule");
-    expect(mod.meta.name).toBe("Winter Yule & Christmas Isle");
+    expect(mod.meta.name).toBe("Winter Holidays");
     expect(mod.meta.version).toBe("1.0.0");
-    expect(mod.meta.description).toContain("Santa hats");
+    expect(mod.meta.description).toContain("hats on the animals");
     expect(mod.meta.defaultEnabled).toBe(true);
   });
 

@@ -1,5 +1,5 @@
 /**
- * The Pack, Colonies & Territorial Warfare mod (`mods/builtin/pack-warfare.ts`). Animals of
+ * The Packs and Rivals mod (`mods/builtin/pack-warfare.ts`). Animals of
  * one species near each other go about as a pack (boids): a stroll leans the way the pack
  * faces (alignment), away from a mate too close (separation), and back toward its mates
  * when it has strayed (cohesion); a pack of four or more keeps a nest at its middle, which

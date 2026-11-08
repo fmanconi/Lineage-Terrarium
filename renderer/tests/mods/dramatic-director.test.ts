@@ -56,7 +56,7 @@ describe("DramaticDirectorMod", () => {
   it("declares metadata correctly with defaultEnabled=true", () => {
     const mod = new DramaticDirectorMod();
     expect(mod.meta.id).toBe("dramatic-director");
-    expect(mod.meta.name).toBe("Dramatic Director AI");
+    expect(mod.meta.name).toBe("Event Camera");
     expect(mod.meta.version).toBe("1.0.0");
     expect(mod.meta.defaultEnabled).toBe(true);
   });

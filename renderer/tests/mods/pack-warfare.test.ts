@@ -74,10 +74,10 @@ describe("PackWarfareMod", () => {
   it("declares itself on by default", () => {
     const mod = new PackWarfareMod();
     expect(mod.meta.id).toBe("pack-warfare");
-    expect(mod.meta.name).toBe("Pack, Colonies & Territorial Warfare");
+    expect(mod.meta.name).toBe("Packs and Rivals");
     expect(mod.meta.version).toBe("1.0.0");
     expect(mod.meta.description).toBe(
-      "Swarm & pack cohesion, colony nests, and territorial skirmishes with rival species.",
+      "Animals of a species move together, larger groups keep a nest, and rival species face off.",
     );
     expect(mod.meta.defaultEnabled).toBe(true);
   });

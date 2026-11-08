@@ -1,5 +1,5 @@
 /**
- * Terrarium XL: Macro Zoom & Apex Ecology Mod (ADR 0024):
+ * Close Zoom and Body Sizes Mod (ADR 0024):
  *
  * 1. Macro zoom: in the local view (the animal followed), `Z` or the mouse wheel brings the
  *    camera in to 2×, 3× and 4×, centred on the shot's middle, so that the smallest animals can
@@ -64,10 +64,10 @@ function parseLevel(raw: string | null): MacroZoomLevel {
 export class XlScaleMod implements Mod {
   readonly meta: ModMetadata = {
     id: "xl-scale",
-    name: "Terrarium XL: Macro Zoom & Apex Ecology",
+    name: "Close Zoom and Body Sizes",
     version: "1.0.0",
     description:
-      "Deep macro zoom (key [Z] or wheel) and ecological scale from 15cm micro-critters to massive apex predators.",
+      "A closer zoom in the local view (Z or the mouse wheel), and a wider range of body sizes.",
     defaultEnabled: true,
   };
 

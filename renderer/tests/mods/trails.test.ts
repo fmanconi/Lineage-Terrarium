@@ -14,7 +14,7 @@ const landOf = (width: number, height: number) => {
   return { width, height, heights, seaLevel: 0.3 };
 };
 
-describe("Footprints & Game Trails Mod", () => {
+describe("Footprints and Trails Mod", () => {
   beforeEach(() => {
     trailSystem.reset();
     setTrailsActive(false);
@@ -23,7 +23,7 @@ describe("Footprints & Game Trails Mod", () => {
   it("registers metadata correctly", () => {
     const mod = new FootprintsTrailsMod();
     expect(mod.meta.id).toBe("footprints-trails");
-    expect(mod.meta.name).toBe("Footprints & Game Trails");
+    expect(mod.meta.name).toBe("Footprints and Trails");
     expect(mod.meta.defaultEnabled).toBe(true);
   });
 
