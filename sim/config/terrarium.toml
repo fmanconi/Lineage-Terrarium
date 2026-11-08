@@ -388,7 +388,7 @@ species_min_cells = 30
 # Hard caps: no births while a kind is at or above its cap. Predators (diet gene at or
 # above predator_min_diet) are counted apart from everyone else, so a full herd cannot
 # crowd them out.
-population_cap = 200
+population_cap = 250
 predator_cap = 32
 # Founders arrive when at least this share of the land carries well-grown plants and
 # nobody lives here, in spring or summer, after this delay (days). They are one species: a random genome that
@@ -429,8 +429,8 @@ hunter_size_margin = 0.1
 
 # --- Body (phenotype) ---
 # Mass grows geometrically with the size gene, from mass_min to mass_max.
-mass_min = 0.25
-mass_max = 16.0
+mass_min = 0.08
+mass_max = 32.0
 # Leg pairs = round(limbs gene × limb_pairs_max).
 limb_pairs_max = 4
 # Land speed (cells per hour) of a mass-1 creature with two leg pairs and no armour:

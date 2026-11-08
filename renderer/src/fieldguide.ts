@@ -23,6 +23,7 @@ import { PORTRAIT_SIZE } from "./creatures/portrait";
 import type { LivingSpeciesSummary, SpeciesGuideSnapshot, SpeciesRecord } from "./herd";
 import { paintKeycap, type GuideTab } from "./keybar";
 import { SUNLIT } from "./palette";
+import { formatMetricSize, isXlScaleActive } from "./mods/builtin/xl-scale";
 import { HAND_FONT, draw, measure } from "./pixelfont";
 import type { ClockMessage, SkyMessage } from "./protocol";
 import { stepSetting, type TerrariumSettings } from "./settings";
@@ -617,6 +618,10 @@ function paintSpeciesSpread(view: FieldGuideView, h: DrawHelpers): void {
   h.text(`Adults: ${adults}  Young: ${selected.young}`, notesX, 58, WORD_INK);
   h.text(`Awake: ${awake}  Sleep: ${selected.torpid}`, notesX, 69, WORD_INK);
   h.text(`Graze: ${selected.grazing}  Feed: ${selected.feeding}`, notesX, 80, WORD_INK);
+  // Terrarium XL: the species' size class in centimetres and kilograms.
+  if (isXlScaleActive()) {
+    h.text(fitText(formatMetricSize(selected.mass), notesW), notesX, 89, FADED_INK);
+  }
 
   // 6 Mean Genome Gauges
   const dietColour =

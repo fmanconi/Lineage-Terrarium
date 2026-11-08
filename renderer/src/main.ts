@@ -129,6 +129,7 @@ import { FootprintsTrailsMod } from "./mods/builtin/trails";
 import { SeasonalFlairMod } from "./mods/builtin/seasons-flair";
 import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod } from "./mods/builtin/biophony";
+import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -430,6 +431,8 @@ async function start(): Promise<void> {
   mods.register(new SeasonalFlairMod());
   mods.register(new EcoHeatmapMod());
   mods.register(new BiophonyMod());
+  const xlScale = new XlScaleMod();
+  mods.register(xlScale);
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
@@ -919,12 +922,12 @@ async function start(): Promise<void> {
       toggleMods();
       return;
     }
-    if (mods.dispatchKey(event)) return;
     if (fieldGuide.open) {
       if (event.key === "Tab") event.preventDefault();
       fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
       return;
     }
+    if (mods.dispatchKey(event)) return;
     if (event.key === "Tab") {
       event.preventDefault();
       toggleGuide();
@@ -982,6 +985,15 @@ async function start(): Promise<void> {
 
   let currentNightAlpha = settings.sleepMode ? nightVeilAlpha(1, settings.nightDimmer, true) : 0;
   let shot: Shot = { view: pinned ?? "map", centre: { x: 0, y: 0 }, dim: 0, subject: null };
+  // The mouse wheel zooms the local view in and out (Terrarium XL's macro zoom).
+  frame.addEventListener(
+    "wheel",
+    (event) => {
+      if (modMenu.isOpen() || fieldGuide.open) return;
+      if (xlScale.onWheel(event.deltaY, shot.view)) event.preventDefault();
+    },
+    { passive: false },
+  );
   window.__sceneSettled = () => landscape.settled;
   window.__receive = receive;
   window.__press = press;
@@ -1272,21 +1284,26 @@ async function start(): Promise<void> {
     // The plants lean in the atmosphere's wind from the next frame on; a picture that must
     // not change keeps them straight.
     landscape.wind = still ? null : atmosphere.wind;
-    world.scale.set(tile);
+    // Terrarium XL's macro zoom: the local view magnified round its middle (the same art,
+    // in larger pixels); the plants and animals are still laid out for the whole view.
+    const zoom = xlScale.macroZoomFor(shot.view);
+    const scale = tile * zoom;
+    const seen = zoom === 1 ? cells : sight(shot.centre, WIDTH / scale, HEIGHT / scale);
+    world.scale.set(scale);
     // Under cloud the world is greyed (one filter pass); none on a clear day.
     if (atmosphere.graded !== graded) {
       graded = atmosphere.graded;
       world.filters = graded ? [atmosphere.grade] : [];
     }
     // Whole art pixels in the canvas, the fraction left by sliding the canvas itself.
-    const x = -cells.x0 * tile;
-    const y = -cells.y0 * tile;
+    const x = -seen.x0 * scale;
+    const y = -seen.y0 * scale;
     world.position.set(Math.floor(x) + MARGIN + shake.x, Math.floor(y) + MARGIN + shake.y);
-    atmosphere.lights.scale.set(tile);
+    atmosphere.lights.scale.set(scale);
     atmosphere.lights.position.copyFrom(world.position);
-    modsOver.scale.set(tile);
+    modsOver.scale.set(scale);
     modsOver.position.copyFrom(world.position);
-    marker.update(stepS, entry, shot.view, cells, tile, world.position);
+    marker.update(stepS, entry, shot.view, seen, scale, world.position);
     // In whole device pixels: a browser smooths a picture placed between them.
     const device = window.devicePixelRatio || 1;
     const slide = (value: number): number =>

@@ -73,6 +73,8 @@ export interface LivingSpeciesSummary {
   mark: number;
   representativeId: number;
   meanGenome: Genome;
+  /** The mean genome's mass (sim units), the giant gene's factor included. */
+  mass: number;
   traits: string;
   dietClass: "grazer" | "omnivore" | "hunter";
   icons: IconName[];
@@ -931,6 +933,7 @@ export class Herd {
         mark: markColour,
         representativeId: bestId,
         meanGenome,
+        mass: effectiveMass,
         traits: described.traits,
         dietClass,
         icons: described.icons,
