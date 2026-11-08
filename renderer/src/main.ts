@@ -131,6 +131,7 @@ import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { FormicariumMod } from "./mods/builtin/formicarium";
+import { MiniatureBadge, MiniatureManager } from "./miniature";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -294,6 +295,14 @@ declare global {
     pywebview?: {
       api?: {
         toggle_fullscreen?: () => Promise<boolean>;
+        toggle_miniature?: (
+          width: number,
+          height: number,
+          opacity: number,
+        ) => Promise<{ active: boolean; opacity: number; width: number; height: number }>;
+        set_opacity?: (alpha: number) => Promise<number>;
+        resize_window?: (width: number, height: number) => Promise<{ width: number; height: number }>;
+        set_on_top?: (onTop: boolean) => Promise<boolean>;
       };
     };
   }
@@ -436,7 +445,16 @@ async function start(): Promise<void> {
   mods.register(xlScale);
   mods.register(new FormicariumMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
-  frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
+  const miniature = new MiniatureManager(modStorage);
+  const miniatureBadge = new MiniatureBadge(miniature, WIDTH, HEIGHT);
+  frame.append(
+    captions.element,
+    card.element,
+    fieldGuide.element,
+    keyBar.element,
+    modMenu.element,
+    miniatureBadge.element,
+  );
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
   const userModsLoaded = loadUserMods(mods);
@@ -830,41 +848,8 @@ async function start(): Promise<void> {
     }
   };
 
-  let isPiP = false;
-  let pipVideo: HTMLVideoElement | null = null;
-
   const togglePiP = async (): Promise<void> => {
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-        isPiP = false;
-        return;
-      }
-      if (!pipVideo) {
-        pipVideo = document.createElement("video");
-        pipVideo.muted = true;
-        pipVideo.playsInline = true;
-        pipVideo.autoplay = true;
-        const captureCanvas = canvas as HTMLCanvasElement & {
-          captureStream?: (fps: number) => MediaStream;
-        };
-        const stream = captureCanvas.captureStream?.(30);
-        if (!stream) {
-          console.warn("Canvas captureStream not supported in this environment");
-          return;
-        }
-        pipVideo.srcObject = stream;
-        await pipVideo.play();
-        pipVideo.addEventListener("leavepictureinpicture", () => {
-          isPiP = false;
-        });
-      }
-      await pipVideo.requestPictureInPicture();
-      isPiP = true;
-    } catch (err) {
-      console.warn("PiP failed:", err);
-      isPiP = false;
-    }
+    await miniature.toggle(canvas);
   };
 
   const takeSnapshot = (): void => {
@@ -893,6 +878,26 @@ async function start(): Promise<void> {
     if (event.key === "p" || event.key === "P") {
       event.preventDefault();
       void togglePiP();
+      return;
+    }
+    if (event.key === "[" || event.key === "]") {
+      event.preventDefault();
+      void miniature.adjustOpacity(event.key === "[" ? -0.1 : 0.1, canvas);
+      return;
+    }
+    if (event.key === "0" && (miniature.isActive() || miniature.getOpacity() < 1.0)) {
+      event.preventDefault();
+      void miniature.setOpacity(1.0, canvas);
+      return;
+    }
+    if ((event.key === "-" || event.key === "_") && miniature.isActive()) {
+      event.preventDefault();
+      void miniature.adjustSize(-1, canvas);
+      return;
+    }
+    if ((event.key === "+" || event.key === "=") && miniature.isActive()) {
+      event.preventDefault();
+      void miniature.adjustSize(1, canvas);
       return;
     }
     if (event.key === "c" || event.key === "C") {
@@ -1422,7 +1427,7 @@ async function start(): Promise<void> {
       ...(miracleDot === undefined ? {} : { miracleDot }),
       sleepMode: settings.sleepMode,
       fullscreen: isFullscreen,
-      pip: isPiP,
+      pip: miniature.isActive(),
       scrollShowing,
       lamp,
     };
@@ -1455,6 +1460,8 @@ async function start(): Promise<void> {
     };
     mods.dispatchUpdate(dtS, modOptions);
     modMenu.update(dtS, lamp);
+    miniature.update(dtS);
+    miniatureBadge.update(dtS);
 
     if (showcase !== null && overlay !== null) {
       const { act } = showcase.now;

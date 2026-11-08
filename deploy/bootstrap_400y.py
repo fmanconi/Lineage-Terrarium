@@ -58,7 +58,7 @@ def build_future_world(
     t0 = time.perf_counter()
     world, _ = World.create(live_cfg, seed, now_ms)
     geo_target_t = evo_start_ms - now_ms
-    geo_step_ms = 240 * clock.MS_PER_DAY
+    geo_step_ms = 730 * clock.MS_PER_DAY
 
     cur_t = world.t_ms
     while cur_t < geo_target_t:

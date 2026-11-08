@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.request
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -45,12 +46,36 @@ DEFAULT_DIST = REPO_ROOT / "renderer" / "dist-kiosk"
 WINDOW_TITLE = "Lineage: Terrarium"
 
 
+def _set_form_prop(form: Any, prop: str, value: Any) -> None:
+    """Safely apply a property to a WinForms form across thread boundaries."""
+    if form is None:
+        return
+    try:
+        from System import Action
+
+        if getattr(form, "InvokeRequired", False):
+            form.Invoke(Action(lambda: setattr(form, prop, value)))
+            return
+    except Exception:
+        pass
+    try:
+        setattr(form, prop, value)
+    except Exception:
+        log.warning("Could not set %s on form", prop, exc_info=True)
+
+
 class DesktopApi:
     """JavaScript bridge exposed at ``window.pywebview.api`` inside the game window."""
 
     def __init__(self, initial_fullscreen: bool = False) -> None:
         self._window: Any = None
         self._fullscreen = initial_fullscreen
+        self._miniature = False
+        self._saved_size: tuple[int, int] = (1366, 820)
+        self._opacity: float = 1.0
+
+    def is_desktop(self) -> bool:
+        return True
 
     def toggle_fullscreen(self) -> bool:
         if self._window is None:
@@ -58,6 +83,85 @@ class DesktopApi:
         self._window.toggle_fullscreen()
         self._fullscreen = not self._fullscreen
         return self._fullscreen
+
+    def _get_form(self) -> Any:
+        if self._window is None:
+            return None
+        try:
+            from webview.platforms.winforms import BrowserView
+
+            return BrowserView.instances.get(self._window.uid)
+        except Exception:
+            return None
+
+    def set_opacity(self, alpha: float) -> float:
+        """Set window opacity (0.15 .. 1.0). Works natively on Windows (WinForms / WebView2)."""
+        self._opacity = max(0.15, min(1.0, float(alpha)))
+        form = self._get_form()
+        if form is not None:
+            _set_form_prop(form, "Opacity", self._opacity)
+        return self._opacity
+
+    def get_opacity(self) -> float:
+        return self._opacity
+
+    def set_on_top(self, on_top: bool) -> bool:
+        """Keep the window pinned always on top of all other windows."""
+        target = bool(on_top)
+        if self._window is not None:
+            with suppress(Exception):
+                self._window.on_top = target
+        form = self._get_form()
+        if form is not None:
+            _set_form_prop(form, "TopMost", target)
+        return target
+
+    def resize_window(self, width: int, height: int) -> dict[str, int]:
+        """Resize the desktop window to given pixel dimensions."""
+        w = max(200, min(3840, int(width)))
+        h = max(120, min(2160, int(height)))
+        if self._window is not None:
+            with suppress(Exception):
+                self._window.resize(w, h)
+        return {"width": w, "height": h}
+
+    def toggle_miniature(
+        self,
+        width: int = 384,
+        height: int = 224,
+        opacity: float = 0.85,
+    ) -> dict[str, Any]:
+        """Toggle between full desktop window and a floating, translucent miniature companion."""
+        if self._window is None:
+            return {"active": False, "opacity": 1.0, "width": 0, "height": 0}
+
+        self._miniature = not self._miniature
+        if self._miniature:
+            with suppress(Exception):
+                self._saved_size = (int(self._window.width), int(self._window.height))
+
+            self.resize_window(width, height)
+            self.set_on_top(True)
+            self.set_opacity(opacity)
+        else:
+            self.set_opacity(1.0)
+            self.set_on_top(False)
+            self.resize_window(self._saved_size[0], self._saved_size[1])
+
+        return {
+            "active": self._miniature,
+            "opacity": self._opacity,
+            "width": width if self._miniature else self._saved_size[0],
+            "height": height if self._miniature else self._saved_size[1],
+        }
+
+    def get_miniature_state(self) -> dict[str, Any]:
+        return {
+            "active": self._miniature,
+            "opacity": self._opacity,
+            "width": int(self._window.width) if self._window else 0,
+            "height": int(self._window.height) if self._window else 0,
+        }
 
 
 def bootstrap_fast_world(

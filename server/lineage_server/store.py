@@ -54,7 +54,7 @@ def write_atomic(path: Path, data: bytes) -> None:
 
 def save_name(unix_ms: int) -> str:
     """The file name of a save of the world at ``unix_ms``."""
-    when = dt.datetime.fromtimestamp(unix_ms / 1000, tz=dt.UTC)
+    when = dt.datetime(1970, 1, 1, tzinfo=dt.UTC) + dt.timedelta(milliseconds=unix_ms)
     return when.strftime("%Y-%m-%dT%H-%M-%S.") + f"{unix_ms % 1000:03d}Z{SAVE_SUFFIX}"
 
 

@@ -76,7 +76,7 @@ def solar_elevation(
     unix_ms: int, lat: float = PISA_LATITUDE, lon: float = PISA_LONGITUDE
 ) -> float:
     """Astronomical solar elevation in degrees above horizon for given UTC unix_ms."""
-    utc_dt = dt.datetime.fromtimestamp(unix_ms / 1000, tz=dt.UTC)
+    utc_dt = dt.datetime(1970, 1, 1, tzinfo=dt.UTC) + dt.timedelta(milliseconds=unix_ms)
     day_of_year = utc_dt.timetuple().tm_yday
     hour_utc = utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0
     gamma = 2.0 * math.pi / 365.25 * (day_of_year - 1 + (hour_utc - 12.0) / 24.0)
