@@ -201,6 +201,7 @@ class Presence:
         self._ready_told = True  # GodPowerReady already sent for this cooldown
         self._rain_until_ms = 0  # the land is wet until then
         self._wet = False  # what the plants and fires were last told
+        self._phase_end_ms = 0  # sim time when the current day/night phase ends
 
     @property
     def name(self) -> str:
@@ -233,6 +234,11 @@ class Presence:
         """Sim time from which the button works (the LED is lit before it)."""
         return self._ready_ms
 
+    @property
+    def phase_end_ms(self) -> int:
+        """Sim time when the current alternating day/night phase ends (0 when inactive)."""
+        return self._phase_end_ms
+
     def closed(self) -> frozenset[Power]:
         """Powers the island cannot draw now: the ark, on an empty island whose plants
         could not yet feed founders (the owner, 2026-10-22: early arks starved)."""
@@ -255,6 +261,10 @@ class Presence:
         }
 
     def initialize(self, ctx: Context) -> list[OutputEvent]:
+        if self._cfg.alternating_cycle and self._phase_end_ms <= 0:
+            self._phase_end_ms = ctx.t_ms + self._draw_phase_ms(ctx.rng)
+            self._push()
+            return []
         if self._cfg.solar_cycle and self._hours == 0.0:
             target = solar_target_light(
                 self._cfg,
@@ -269,7 +279,15 @@ class Presence:
 
     def tick(self, ctx: Context) -> list[OutputEvent]:
         hours = ctx.dt_s / _SECONDS_PER_HOUR
-        if self._cfg.solar_cycle:
+        if self._cfg.alternating_cycle:
+            if self._phase_end_ms <= 0:
+                self._phase_end_ms = ctx.t_ms + self._draw_phase_ms(ctx.rng)
+            while ctx.t_ms >= self._phase_end_ms:
+                self._present = not self._present
+                self._absent_h = 0.0
+                self._phase_end_ms += self._draw_phase_ms(ctx.rng)
+            target = 1.0 if self._present else self._cfg.night_light
+        elif self._cfg.solar_cycle:
             target = solar_target_light(
                 self._cfg,
                 ctx.instant.unix_ms,
@@ -301,6 +319,7 @@ class Presence:
             isinstance(event, PresenceChanged)
             and event.present != self._present
             and not self._cfg.solar_cycle
+            and not self._cfg.alternating_cycle
         ):
             self._present = event.present
             self._absent_h = 0.0
@@ -309,7 +328,7 @@ class Presence:
         return []
 
     def get_state(self) -> Tree:
-        return {
+        state: Tree = {
             "present": self._present,
             "light": self._light,
             "absent_h": self._absent_h,
@@ -321,6 +340,9 @@ class Presence:
             "rain_until_ms": self._rain_until_ms,
             "wet": self._wet,
         }
+        if self._cfg.alternating_cycle or self._phase_end_ms > 0:
+            state["phase_end_ms"] = self._phase_end_ms
+        return state
 
     def set_state(self, tree: Tree) -> None:
         self._present = bool(tree["present"])
@@ -333,9 +355,17 @@ class Presence:
         self._ready_told = bool(tree["ready_told"])
         self._rain_until_ms = int(tree["rain_until_ms"])
         self._wet = bool(tree["wet"])
+        self._phase_end_ms = int(tree.get("phase_end_ms", 0))
         self._push()
 
     # -- internals --
+
+    def _draw_phase_ms(self, rng: Generator) -> int:
+        """Draw the next day or night phase length uniformly in
+        ``[cycle_min_hours, cycle_max_hours]``.
+        """
+        hours = float(rng.uniform(self._cfg.cycle_min_hours, self._cfg.cycle_max_hours))
+        return max(1, round(hours * _SECONDS_PER_HOUR * 1000.0))
 
     def _push(self) -> None:
         """Hand the other subsystems the light and the weather (their hooks are not

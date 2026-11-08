@@ -62,6 +62,30 @@ class SystemClock:
         return time.time_ns() // 1_000_000 + self._offset_ms
 
 
+class ScaledClock:
+    """Wall clock whose time flows ``scale`` times faster than real time from an anchor."""
+
+    def __init__(self, scale: float = 1.0, initial_unix_ms: int | None = None) -> None:
+        if scale <= 0:
+            raise ValueError("scale must be positive")
+        self.scale = float(scale)
+        self._anchor_mono_ns = time.monotonic_ns()
+        self._anchor_unix_ms = (
+            int(initial_unix_ms)
+            if initial_unix_ms is not None
+            else time.time_ns() // 1_000_000
+        )
+
+    def anchor_to(self, sim_unix_ms: int) -> None:
+        """Anchor the scaled clock to ``sim_unix_ms`` right now (zero offline jump)."""
+        self._anchor_mono_ns = time.monotonic_ns()
+        self._anchor_unix_ms = int(sim_unix_ms)
+
+    def now_ms(self) -> int:
+        elapsed_ms = ((time.monotonic_ns() - self._anchor_mono_ns) * self.scale) / 1_000_000.0
+        return self._anchor_unix_ms + round(elapsed_ms)
+
+
 def is_loopback(connection: ServerConnection) -> bool:
     """Whether the client is on the device itself (the desk's kiosk)."""
     address = connection.remote_address
@@ -315,6 +339,8 @@ class Server:
             self.port = next(iter(server.sockets)).getsockname()[1]
             log.info("serving on port %d", self.port)
             opened = await self._in_sim(lambda: self.island.open(self.clock.now_ms()))
+            if isinstance(self.clock, ScaledClock) and self.island.pause_offline:
+                self.clock.anchor_to(self.island.world.unix_ms)
             if opened.skipped:
                 log.warning("saves that did not load: %s", [p.name for p in opened.skipped])
             self._started_wall = time.monotonic()

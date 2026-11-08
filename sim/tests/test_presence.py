@@ -426,3 +426,38 @@ def test_presence_solar_cycle_world(config: Config) -> None:
     world.step(12 * 3600)
     assert world.presence.light >= 0.95
     assert world.presence.present
+
+
+def test_presence_alternating_uniform_cycle(config: Config) -> None:
+    from lineage_sim.world import World
+
+    # Default worlds must not emit phase_end_ms into state snapshots.
+    plain, _ = World.create(config, seed=7, epoch_unix_ms=0)
+    assert "phase_end_ms" not in plain.presence.get_state()
+
+    alt_cfg = replace(
+        config.presence,
+        alternating_cycle=True,
+        cycle_min_hours=75.0,
+        cycle_max_hours=105.0,
+        dawn_hours=4.5,
+        dusk_hours=6.0,
+        night_light=0.07,
+    )
+    full_cfg = replace(config, presence=alt_cfg)
+    world, _ = World.create(full_cfg, seed=42, epoch_unix_ms=0)
+    assert world.presence.present
+    first_span_h = world.presence.phase_end_ms / 3_600_000.0
+    assert 75.0 <= first_span_h <= 105.0
+
+    # Step across the first phase boundary into night and verify dusk -> night_light.
+    world.advance_to(world.presence.phase_end_ms + 7 * 3_600_000)
+    assert not world.presence.present
+    assert world.presence.light == pytest.approx(0.07, abs=0.01)
+
+    # Save/restore determinism across subsequent alternating phases.
+    copy = World.restore(full_cfg, io.loads(io.dumps(world.snapshot())))
+    world.step(120 * 3600)
+    copy.step(120 * 3600)
+    assert world.state_hash() == copy.state_hash()
+

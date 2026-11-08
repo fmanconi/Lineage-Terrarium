@@ -42,6 +42,8 @@ const MOON_OFF = 0x7a6855;
 const MOON_ON = 0xe8b44c;
 
 const MOON_BITMAP = ["..##.", ".##..", ".##..", ".##..", "..##."] as const;
+const FULL_OFF_BITMAP = ["##.##", "#...#", ".....", "#...#", "##.##"] as const;
+const FULL_ON_BITMAP = [".#.#.", "##.##", ".....", "##.##", ".#.#."] as const;
 
 /** Pixel arrow glyphs (11x7) for keycaps so no character outside `pixelfont.ts` is needed. */
 export const ARROW_BITMAPS = {
@@ -72,8 +74,8 @@ export interface KeyHint {
   id: string;
   key: KeyGlyph;
   label: string;
-  /** Optional status gem or crescent moon beside the label. */
-  dot?: "ready" | "cooldown" | "moon-off" | "moon-on";
+  /** Optional status gem, crescent moon, or fullscreen corner glyph beside the label. */
+  dot?: "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on";
 }
 
 export type GuideTab = "species" | "lineage" | "island";
@@ -84,6 +86,7 @@ export function hintsForState(
   tab: GuideTab,
   miracleDot?: "ready" | "cooldown",
   sleepMode = false,
+  fullscreen = false,
 ): KeyHint[] {
   if (!guideOpen) {
     return [
@@ -100,6 +103,12 @@ export function hintsForState(
         key: { kind: "text", text: "G" },
         label: "Miracle",
         ...(miracleDot === undefined ? {} : { dot: miracleDot }),
+      },
+      {
+        id: "fullscreen",
+        key: { kind: "text", text: "F" },
+        label: "Full",
+        dot: fullscreen ? "full-on" : "full-off",
       },
     ];
   }
@@ -197,8 +206,12 @@ export function paintKeycap(
 function hintWidth(hint: KeyHint): number {
   const base = keycapWidth(hint.key) + LABEL_GAP + measure(hint.label);
   if (hint.dot === undefined) return base;
-  const iconW = hint.dot === "moon-off" || hint.dot === "moon-on" ? 5 : DOT_SIZE;
-  return base + DOT_GAP + iconW;
+  const is5px =
+    hint.dot === "moon-off" ||
+    hint.dot === "moon-on" ||
+    hint.dot === "full-off" ||
+    hint.dot === "full-on";
+  return base + DOT_GAP + (is5px ? 5 : DOT_SIZE);
 }
 
 /** Size of the painted key hint strip in art pixels, shadow included. */
@@ -253,12 +266,23 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
     cursor += draw(hint.label, cursor, top + 2, (px, py) => put(px, py, WORD_INK));
     if (hint.dot !== undefined) {
       cursor += DOT_GAP;
-      if (hint.dot === "moon-off" || hint.dot === "moon-on") {
-        const moonCol = hint.dot === "moon-on" ? MOON_ON : MOON_OFF;
+      if (
+        hint.dot === "moon-off" ||
+        hint.dot === "moon-on" ||
+        hint.dot === "full-off" ||
+        hint.dot === "full-on"
+      ) {
+        const iconCol = hint.dot === "moon-on" || hint.dot === "full-on" ? MOON_ON : MOON_OFF;
+        const bitmap =
+          hint.dot === "full-on"
+            ? FULL_ON_BITMAP
+            : hint.dot === "full-off"
+              ? FULL_OFF_BITMAP
+              : MOON_BITMAP;
         const my = top + 3;
-        MOON_BITMAP.forEach((row, r) => {
+        bitmap.forEach((row, r) => {
           [...row].forEach((ch, c) => {
-            if (ch === "#") put(cursor + c, my + r, moonCol);
+            if (ch === "#") put(cursor + c, my + r, iconCol);
           });
         });
         cursor += 5;
@@ -345,6 +369,7 @@ export class KeyBar {
       tab: GuideTab;
       miracleDot?: "ready" | "cooldown";
       sleepMode?: boolean;
+      fullscreen?: boolean;
       scrollShowing: boolean;
       lamp?: Rgb;
     },
@@ -356,6 +381,7 @@ export class KeyBar {
       tab,
       miracleDot,
       sleepMode = false,
+      fullscreen = false,
       scrollShowing,
       lamp = DAYLIGHT,
     } = options;
@@ -380,7 +406,7 @@ export class KeyBar {
       return;
     }
 
-    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode);
+    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode, fullscreen);
     const key = JSON.stringify([hints, lampKey(lamp)]);
     const share = (v: number, total: number): string => `${(100 * v) / total}%`;
 

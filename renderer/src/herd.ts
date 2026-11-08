@@ -413,13 +413,17 @@ export class Herd {
     atlas: Atlas,
     random: Random,
     private readonly landOf: () => Land | null,
+    paceScale: { middle: number; local: number } = { middle: 1, local: 1 },
   ) {
     const passable: Passable = (x, y, swims) =>
       this.current() !== null && (this.passable?.(x, y, swims) ?? false);
     const sea: SeaAt = (x, y) => (this.current() === null ? null : (this.sea?.(x, y) ?? null));
     const layer = (body: (typeof BODIES)["middle"]): CreatureLayer =>
       new CreatureLayer(atlas, [], passable, random, body, "anchored", sea, WATER_LOOK);
-    this.layers = { middle: layer(BODIES.middle), local: layer(BODIES.local) };
+    this.layers = {
+      middle: layer({ ...BODIES.middle, pace: BODIES.middle.pace * paceScale.middle }),
+      local: layer({ ...BODIES.local, pace: BODIES.local.pace * paceScale.local }),
+    };
     // In the middle view an animal is a few art pixels long: posed two frames in three (R5).
     this.layers.middle.posedSparsely = true;
     for (const each of Object.values(this.layers)) each.show("hidden");

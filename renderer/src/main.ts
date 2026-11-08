@@ -270,6 +270,12 @@ declare global {
     __advance?: (seconds: number) => void;
     /** Inspect or toggle the naturalist's field guide (tests). */
     __guide?: () => { open: boolean; tab: string; species: number; totalCreatures: number };
+    /** Optional pywebview native desktop window API. */
+    pywebview?: {
+      api?: {
+        toggle_fullscreen?: () => Promise<boolean>;
+      };
+    };
   }
 }
 
@@ -289,6 +295,7 @@ async function start(): Promise<void> {
   // build so that it runs on the board as the desk would (`showcase/`).
   const showcasing = params.get("showcase") !== null;
   const desktop = params.get("desktop") !== null;
+  const fastLife = params.get("fast") !== null;
 
   const app = new Application();
   await app.init({
@@ -353,7 +360,12 @@ async function start(): Promise<void> {
   world.addChild(landscape.container);
   const seed = Number(params.get("seed") ?? Date.now() % 2 ** 31);
   const atlas = creatureAtlas();
-  const herd = new Herd(atlas, mulberry32(seed + 1), () => landscape.current);
+  const herd = new Herd(
+    atlas,
+    mulberry32(seed + 1),
+    () => landscape.current,
+    fastLife ? { middle: 1.45, local: 2.2 } : { middle: 1, local: 1 },
+  );
   // Live, a page's first animals are drawn over its first frames (the start's longest
   // wait on the board); films and stills draw them at once, the same frames every time.
   herd.spreadPlacing = params.get("film") === null && params.get("still") === null;
@@ -647,7 +659,7 @@ async function start(): Promise<void> {
 
   if (socket !== null && !film && !still && bench === null) {
     window.setTimeout(() => void pollMiracle(), 1200);
-    window.setInterval(() => void pollMiracle(), 30_000);
+    window.setInterval(() => void pollMiracle(), fastLife ? 10_000 : 30_000);
   }
 
   toMap = () => {
@@ -686,10 +698,49 @@ async function start(): Promise<void> {
     if (settings.sleepMode && fieldGuide.open) fieldGuide.close();
   };
 
+  let isFullscreen = Boolean(document.fullscreenElement);
+  document.addEventListener("fullscreenchange", () => {
+    isFullscreen = Boolean(document.fullscreenElement);
+  });
+  window.addEventListener("resize", () => {
+    if (window.pywebview?.api?.toggle_fullscreen !== undefined) {
+      isFullscreen =
+        window.innerWidth >= window.screen.width - 2 &&
+        window.innerHeight >= window.screen.height - 2;
+    }
+  });
+
+  const toggleFullscreen = async (): Promise<void> => {
+    if (window.pywebview?.api?.toggle_fullscreen !== undefined) {
+      try {
+        isFullscreen = Boolean(await window.pywebview.api.toggle_fullscreen());
+        return;
+      } catch {
+        // Fall through to standard Fullscreen API.
+      }
+    }
+    try {
+      if (document.fullscreenElement !== null) {
+        await document.exitFullscreen();
+        isFullscreen = false;
+      } else {
+        await document.documentElement.requestFullscreen();
+        isFullscreen = true;
+      }
+    } catch {
+      // Ignore if blocked by browser policy.
+    }
+  };
+
   window.addEventListener("keydown", (event) => {
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     userInteracted = true;
     keyBar.wake();
+    if (event.key === "f" || event.key === "F" || event.key === "F11") {
+      event.preventDefault();
+      void toggleFullscreen();
+      return;
+    }
     if (event.key === "n" || event.key === "N") {
       toggleSleep();
       return;
@@ -697,6 +748,14 @@ async function start(): Promise<void> {
     if (fieldGuide.open) {
       if (event.key === "Tab") event.preventDefault();
       fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
+      return;
+    }
+    if (
+      event.key === "Escape" &&
+      isFullscreen &&
+      window.pywebview?.api?.toggle_fullscreen !== undefined
+    ) {
+      void toggleFullscreen();
       return;
     }
     if (event.key === "Tab" || event.key === "m" || event.key === "M") {
@@ -731,6 +790,7 @@ async function start(): Promise<void> {
     if (barHit !== null) {
       if (barHit === "guide") toggleGuide();
       else if (barHit === "night") toggleSleep();
+      else if (barHit === "fullscreen") void toggleFullscreen();
       else if (barHit === "view") {
         fieldGuide.close();
         press();
@@ -1169,6 +1229,7 @@ async function start(): Promise<void> {
       tab: fieldGuide.tab,
       ...(miracleDot === undefined ? {} : { miracleDot }),
       sleepMode: settings.sleepMode,
+      fullscreen: isFullscreen,
       scrollShowing,
       lamp,
     });

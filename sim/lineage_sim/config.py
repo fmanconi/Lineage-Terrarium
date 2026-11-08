@@ -642,6 +642,9 @@ class PresenceConfig:
     solar_cycle: bool = False
     latitude: float = 43.7228
     longitude: float = 10.4017
+    alternating_cycle: bool = False
+    cycle_min_hours: float = 75.0
+    cycle_max_hours: float = 105.0
 
     def __post_init__(self) -> None:
         def check(ok: bool, message: str) -> None:
@@ -650,8 +653,12 @@ class PresenceConfig:
 
         for key in ("dawn_hours", "dusk_hours", "plant_full_light", "plant_light_days",
                     "meteor_radius_cells",
-                    "meteor_depth", "ark_need_creatures"):  # fmt: skip
+                    "meteor_depth", "ark_need_creatures", "cycle_min_hours"):  # fmt: skip
             check(getattr(self, key) > 0, f"{key} must be positive")
+        check(
+            self.cycle_max_hours >= self.cycle_min_hours,
+            "cycle_max_hours below cycle_min_hours",
+        )
         for key in ("night_light", "moonlight", "plant_full_light", "rain_fertility",
                     "seed_rare_chance", "meteor_depth"):  # fmt: skip
             check(0 <= getattr(self, key) <= 1, f"{key} must be within [0, 1]")

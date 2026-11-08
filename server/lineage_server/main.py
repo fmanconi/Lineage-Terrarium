@@ -32,11 +32,13 @@ from lineage_device.fake import FakeDevice, KeyboardDevice
 from lineage_sim.config import parse_config
 
 from lineage_server.island import Island, new_seed
-from lineage_server.server import Server, SystemClock
+from lineage_server.server import ScaledClock, Server, SystemClock
 from lineage_server.settings import DEFAULT_SETTINGS, load_settings
 from lineage_server.store import Store
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "default.toml"
+FAST_LIFE_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "fast_life.toml"
+FAST_LIFE_TIME_SCALE = 90.0
 
 
 def _years_ahead_offset_ms(years_ahead: int) -> int:
@@ -54,7 +56,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--data", type=Path, required=True, help="saves and archives live here")
     parser.add_argument("--dist", type=Path, help="the renderer's build to serve (dist-kiosk)")
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS)
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="the sim's config")
+    parser.add_argument("--config", type=Path, default=None, help="the sim's config")
     parser.add_argument("--seed", type=int, help="the first world's seed (default: random)")
     parser.add_argument("--fake-device", action="store_true", help="keys on stdin (S1)")
     parser.add_argument(
@@ -62,6 +64,22 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--solar", action="store_true", help="enable real sun solar cycle (Europe/Rome)"
+    )
+    parser.add_argument(
+        "--fast-life",
+        action="store_true",
+        help="run 90x insect-speed biological lifecycle with 60+-10 min day/night cycle",
+    )
+    parser.add_argument(
+        "--time-scale",
+        type=float,
+        default=None,
+        help="sim seconds per real second (default: 90 with --fast-life, else 1.0)",
+    )
+    parser.add_argument(
+        "--pause-offline",
+        action="store_true",
+        help="resume loaded saves where they stopped without simulating offline downtime",
     )
     parser.add_argument(
         "--port", type=int, help="override HTTP/WebSocket listen port from server.toml"
@@ -81,21 +99,44 @@ def main(argv: list[str] | None = None) -> None:
     logging.getLogger("websockets").setLevel(logging.WARNING)
     if args.dist is not None and not (args.dist / "index.html").is_file():
         parser.error(f"{args.dist} holds no index.html (cd renderer && npm run build:kiosk)")
+    config_path = args.config or (FAST_LIFE_CONFIG if args.fast_life else DEFAULT_CONFIG)
+    time_scale = (
+        args.time_scale
+        if args.time_scale is not None
+        else (FAST_LIFE_TIME_SCALE if args.fast_life else 1.0)
+    )
+    pause_offline = bool(args.pause_offline or args.fast_life)
     settings = load_settings(args.settings)
     if args.port is not None:
         settings = replace(settings, port=args.port)
-    config = parse_config(args.config.read_text(encoding="utf-8"))
-    if args.solar:
+    if time_scale > 1.0:
+        settings = replace(
+            settings,
+            poll_seconds=min(settings.poll_seconds, 0.25),
+            jump_seconds=settings.jump_seconds * time_scale,
+        )
+    config = parse_config(config_path.read_text(encoding="utf-8"))
+    if args.solar and not config.presence.alternating_cycle:
         config = replace(config, presence=replace(config.presence, solar_cycle=True))
     seed = args.seed
     island = Island(
-        config, Store(args.data), settings, seed=new_seed if seed is None else (lambda: seed)
+        config,
+        Store(args.data),
+        settings,
+        seed=new_seed if seed is None else (lambda: seed),
+        pause_offline=pause_offline,
+        time_scale=time_scale,
     )
     if args.headless or not sys.stdin.isatty():
         device = FakeDevice(present=not args.absent)
     else:
         device = KeyboardDevice(present=not args.absent)
-    wall_clock = SystemClock(_years_ahead_offset_ms(args.years_ahead))
+    base_now_ms = SystemClock(_years_ahead_offset_ms(args.years_ahead)).now_ms()
+    wall_clock = (
+        ScaledClock(scale=time_scale, initial_unix_ms=base_now_ms)
+        if time_scale != 1.0
+        else SystemClock(_years_ahead_offset_ms(args.years_ahead))
+    )
     server = Server(island, device, settings, dist=args.dist, clock=wall_clock)
 
     async def run() -> None:

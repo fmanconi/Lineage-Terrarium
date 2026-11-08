@@ -79,6 +79,10 @@ export interface MiracleStatus {
   solar_cycle: boolean;
   solar_elevation_deg: number;
   light: number;
+  time_scale?: number;
+  alternating_cycle?: boolean;
+  daylight_phase?: "day" | "night";
+  phase_remaining_ms?: number;
 }
 
 /** Flattened cladogram row for Tab 2 (`Lineage`). */
@@ -812,10 +816,18 @@ function paintIslandSpread(
   >,
 ): void {
   const { settings, miracle, sky } = view;
+  const timeScale = Math.max(1, miracle?.time_scale ?? 1);
 
   // Left Page: 5 Screensaver & Bedroom Controls
   HAND_FONT.draw("Screensaver & Room", LEFT_X0, 25, (px, py) => h.put(px, py, INK));
-  h.text("Sacred 1:1 real-time island (zero time-cheats)", LEFT_X0, 39, FADED_INK);
+  h.text(
+    timeScale > 1
+      ? `Fast ${Math.round(timeScale)}x living world (press F for fullscreen)`
+      : "Sacred 1:1 real-time island (zero time-cheats)",
+    LEFT_X0,
+    39,
+    FADED_INK,
+  );
 
   const items: { title: string; value: string; note: string }[] = [
     {
@@ -910,12 +922,19 @@ function paintIslandSpread(
     });
   });
 
-  // Right Page Top: Sky Over Pisa
-  HAND_FONT.draw("Sky Over Pisa", RIGHT_X0, 25, (px, py) => h.put(px, py, INK));
+  // Right Page Top: Alternating Day/Night Cycle or Sky Over Pisa
+  const altCycle = miracle?.alternating_cycle === true;
+  HAND_FONT.draw(altCycle ? "Day & Night Cycle" : "Sky Over Pisa", RIGHT_X0, 25, (px, py) =>
+    h.put(px, py, INK),
+  );
   h.hrule(RIGHT_X0, RIGHT_X1, 39, RULE);
 
   const lightLevel = miracle?.light ?? sky?.light ?? 1;
-  if (miracle !== null && miracle.solar_cycle) {
+  if (miracle !== null && altCycle) {
+    const phaseWord = miracle.daylight_phase === "night" ? "Night" : "Day";
+    const wallRemMs = Math.round((miracle.phase_remaining_ms ?? 0) / timeScale);
+    h.text(`Cycle: ${phaseWord} (${formatCooldown(wallRemMs)} left)`, RIGHT_X0, 44, WORD_INK);
+  } else if (miracle !== null && miracle.solar_cycle) {
     const sign = miracle.solar_elevation_deg >= 0 ? "+" : "";
     const phase =
       miracle.solar_elevation_deg >= 6
@@ -944,12 +963,25 @@ function paintIslandSpread(
   const fires = sky?.burning.length ?? 0;
   const fireNote = fires > 0 ? `  (${fires} burning)` : "";
   h.text(`Weather: ${rainName}${fireNote}`, RIGHT_X0, 68, WORD_INK);
-  h.text("Clock: 1:1 with real calendar", RIGHT_X0, 80, FADED_INK);
+  h.text(
+    timeScale > 1
+      ? `Pace: ${Math.round(timeScale)}x fast insect life (50-70m sun)`
+      : "Clock: 1:1 with real calendar",
+    RIGHT_X0,
+    80,
+    FADED_INK,
+  );
 
-  // Right Page Bottom: Weekly Miracle (God Power)
+  // Right Page Bottom: Island Miracle (God Power)
   h.hrule(RIGHT_X0, RIGHT_X1, 95, BAND_RULE);
-  HAND_FONT.draw("Weekly Miracle", RIGHT_X0, 100, (px, py) => h.put(px, py, INK));
-  h.text("Once every 7 days, answer the island's need", RIGHT_X0, 114, FADED_INK);
+  HAND_FONT.draw(timeScale > 1 ? "Island Miracle" : "Weekly Miracle", RIGHT_X0, 100, (px, py) =>
+    h.put(px, py, INK),
+  );
+  const fullCooldownLabel =
+    miracle !== null && timeScale > 1
+      ? formatCooldown((miracle.cooldown_days * 86_400_000) / timeScale)
+      : "7 days";
+  h.text(`Once every ${fullCooldownLabel}, answer the island's need`, RIGHT_X0, 114, FADED_INK);
 
   const sealY0 = 126;
   const sealY1 = 162;
@@ -962,7 +994,12 @@ function paintIslandSpread(
     const kw = paintKeycap({ kind: "text", text: "G" }, RIGHT_X0 + 8, sealY0 + 6, (px, py, c) =>
       h.put(px, py, c),
     );
-    h.text("READY - Grant Weekly Miracle", RIGHT_X0 + 14 + kw, sealY0 + 8, INK);
+    h.text(
+      timeScale > 1 ? "READY - Grant Island Miracle" : "READY - Grant Weekly Miracle",
+      RIGHT_X0 + 14 + kw,
+      sealY0 + 8,
+      INK,
+    );
     h.text(
       view.miracleNote ?? "Draws Rain, Seed, Ark or Meteor",
       RIGHT_X0 + 8,
@@ -979,7 +1016,7 @@ function paintIslandSpread(
   } else {
     h.box(RIGHT_X0, sealY0, RIGHT_X1, sealY1, CARD_SHADE, PLATE_EDGE);
     h.text(
-      `Cooling down: ${formatCooldown(miracle.remaining_ms)} left`,
+      `Cooling down: ${formatCooldown(miracle.remaining_ms / timeScale)} left`,
       RIGHT_X0 + 8,
       sealY0 + 6,
       WORD_INK,

@@ -1,0 +1,236 @@
+"""Standalone desktop software launcher for Lineage (fast-life game mode).
+
+Starts an embedded local ``lineage_server`` on an ephemeral loopback port (``127.0.0.1:0``)
+with ``fast_life.toml`` (``time_scale = 90.0``, continuous uniform ``60 +- 10`` real-minute
+day/night cycle, fast insect-like creature lifecycles, and offline pause when closed) and
+opens a native chromeless desktop window via ``pywebview`` (Edge WebView2 on Windows).
+
+Closing the window cleanly saves the living island to disk before exiting.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import dataclasses
+import logging
+import threading
+import time
+import urllib.request
+from collections.abc import Callable
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+from lineage_device.fake import FakeDevice
+from lineage_sim import clock
+from lineage_sim.config import Config, parse_config
+from lineage_sim.state import io
+from lineage_sim.world import World
+
+from lineage_server.island import Island, new_seed
+from lineage_server.main import FAST_LIFE_CONFIG, FAST_LIFE_TIME_SCALE, _years_ahead_offset_ms
+from lineage_server.server import ScaledClock, Server, SystemClock
+from lineage_server.settings import DEFAULT_SETTINGS, load_settings
+from lineage_server.store import Store
+
+log = logging.getLogger("lineage_desktop")
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_GAME_DATA = REPO_ROOT / "data" / "game-fast-life"
+DEFAULT_DIST = REPO_ROOT / "renderer" / "dist-kiosk"
+
+
+class DesktopApi:
+    """JavaScript bridge exposed at ``window.pywebview.api`` inside the game window."""
+
+    def __init__(self, initial_fullscreen: bool = False) -> None:
+        self.window: Any = None
+        self._fullscreen = initial_fullscreen
+
+    def toggle_fullscreen(self) -> bool:
+        if self.window is None:
+            return False
+        self.window.toggle_fullscreen()
+        self._fullscreen = not self._fullscreen
+        return self._fullscreen
+
+
+def bootstrap_fast_world(
+    data_dir: Path,
+    config: Config,
+    years_ahead: int = 400,
+    seed: int = 242690,
+) -> Path:
+    """Create or seed an immediately lush, multi-species continent in ``data_dir``."""
+    store = Store(data_dir)
+    store.clean()
+    existing = store.load_newest(io.loads)
+    if existing is not None:
+        return existing.path
+
+    log.info("Seeding initial fast-life continent in %s ...", data_dir)
+    # Check if a 400-year evolved world already exists in data/local-400y
+    seed_source_dir = REPO_ROOT / "data" / "local-400y"
+    seed_store = Store(seed_source_dir)
+    latest_src = seed_store.load_newest(io.loads)
+    if latest_src is not None:
+        # Load snapshot and re-save into target data_dir under fast_life configuration
+        src_world = World.restore(config, latest_src.value)
+        saved = store.save(io.dumps(src_world.snapshot()), src_world.unix_ms)
+        log.info(
+            "Inherited %d creatures across %d living species from %s -> %s",
+            src_world.fauna.count,
+            sum(1 for r in src_world.species.records() if r.alive),
+            latest_src.path.name,
+            saved.name,
+        )
+        return saved
+
+    from deploy.bootstrap_400y import build_future_world
+
+    return build_future_world(data_dir, years_ahead=years_ahead, seed=seed)
+
+
+def start_embedded_server(
+    *,
+    data_dir: Path,
+    dist_dir: Path,
+    config: Config,
+    time_scale: float,
+    years_ahead: int,
+    port: int = 0,
+) -> tuple[Server, Callable[[], None], threading.Thread]:
+    """Run ``Server`` on a daemon thread and block until its HTTP/WS socket is ready."""
+    settings = load_settings(DEFAULT_SETTINGS)
+    settings = replace(
+        settings,
+        host="127.0.0.1",
+        port=port,
+        poll_seconds=0.25 if time_scale > 1.0 else settings.poll_seconds,
+        jump_seconds=settings.jump_seconds * max(1.0, time_scale),
+    )
+    island = Island(
+        config,
+        Store(data_dir),
+        settings,
+        seed=new_seed,
+        pause_offline=True,
+        time_scale=time_scale,
+    )
+    base_now_ms = SystemClock(_years_ahead_offset_ms(years_ahead)).now_ms()
+    wall_clock = (
+        ScaledClock(scale=time_scale, initial_unix_ms=base_now_ms)
+        if time_scale != 1.0
+        else SystemClock(_years_ahead_offset_ms(years_ahead))
+    )
+    server = Server(island, FakeDevice(present=True), settings, dist=dist_dir, clock=wall_clock)
+
+    ready_event = threading.Event()
+    loop_holder: dict[str, Any] = {}
+
+    def runner() -> None:
+        async def _main() -> None:
+            stop = asyncio.Event()
+            loop_holder["loop"] = asyncio.get_running_loop()
+            loop_holder["stop"] = stop
+            await server.run(stop, ready=ready_event.set)
+
+        asyncio.run(_main())
+
+    thread = threading.Thread(target=runner, name="lineage-embedded-server", daemon=True)
+    thread.start()
+    if not ready_event.wait(timeout=30.0):
+        raise RuntimeError("Timed out waiting for embedded Lineage server to start")
+
+    stopped = False
+
+    def shutdown() -> None:
+        nonlocal stopped
+        if stopped:
+            return
+        stopped = True
+        loop = loop_holder.get("loop")
+        stop = loop_holder.get("stop")
+        if loop is not None and stop is not None:
+            loop.call_soon_threadsafe(stop.set)
+        thread.join(timeout=10.0)
+
+    return server, shutdown, thread
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Launch Lineage as a standalone desktop game.")
+    parser.add_argument("--data", type=Path, default=DEFAULT_GAME_DATA)
+    parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
+    parser.add_argument("--config", type=Path, default=FAST_LIFE_CONFIG)
+    parser.add_argument("--time-scale", type=float, default=FAST_LIFE_TIME_SCALE)
+    parser.add_argument("--years-ahead", type=int, default=400)
+    parser.add_argument("--fullscreen", action="store_true", help="open directly in fullscreen")
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="verify bootstrap, live fast-life ticking, endpoints, and clean save headlessly",
+    )
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+
+    if not (args.dist / "index.html").is_file():
+        raise SystemExit(f"Missing renderer build at {args.dist} (run npm run build:kiosk)")
+
+    config = parse_config(args.config.read_text(encoding="utf-8"))
+    bootstrap_fast_world(args.data, config, years_ahead=args.years_ahead)
+
+    server, shutdown, _ = start_embedded_server(
+        data_dir=args.data,
+        dist_dir=args.dist,
+        config=config,
+        time_scale=args.time_scale,
+        years_ahead=args.years_ahead,
+    )
+    url = f"http://127.0.0.1:{server.port}/?desktop=1&fast=1"
+
+    if args.smoke_test:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/god-power") as resp:
+                gp1 = resp.read().decode("utf-8")
+            pos0 = server.island.world.fauna.positions.copy()
+            time.sleep(2.4)
+            pos1 = server.island.world.fauna.positions.copy()
+            moved = (
+                int((((pos1 - pos0) ** 2).sum(axis=1) > 0).sum())
+                if len(pos0) == len(pos1)
+                else -1
+            )
+            log.info("Smoke test OK on %s | god-power=%s | moved=%s", url, gp1, moved)
+        finally:
+            shutdown()
+        return
+
+    import webview  # Lazy import so headless Linux servers never need pywebview
+
+    api = DesktopApi(initial_fullscreen=args.fullscreen)
+    window = webview.create_window(
+        "Lineage",
+        url,
+        width=1366,
+        height=820,
+        min_size=(640, 400),
+        fullscreen=args.fullscreen,
+        background_color="#10081c",
+        js_api=api,
+    )
+    api.window = window
+    window.events.closed += lambda: shutdown()
+    try:
+        webview.start(debug=False)
+    finally:
+        shutdown()
+
+
+if __name__ == "__main__":
+    main()

@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -103,7 +104,14 @@ class Store:
         removed: list[Path] = []
         for directory in (self.saves_dir, self.archives_dir):
             for tmp in sorted(directory.glob("*" + TMP_SUFFIX)):
-                tmp.unlink()
+                for attempt in range(5):
+                    try:
+                        tmp.unlink()
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.02)
                 removed.append(tmp)
         return removed
 

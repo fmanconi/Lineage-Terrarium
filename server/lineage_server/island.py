@@ -111,11 +111,16 @@ class Island:
         store: Store,
         settings: Settings,
         seed: Callable[[], int] = new_seed,
+        *,
+        pause_offline: bool = False,
+        time_scale: float = 1.0,
     ) -> None:
         self._config = config
         self._store = store
         self._settings = settings
         self._seed = seed
+        self._pause_offline = pause_offline
+        self._time_scale = float(time_scale)
         self._world: World | None = None
         self._feed: Feed | None = None
         self.numbers = Numbers()
@@ -124,6 +129,14 @@ class Island:
         self._sky_ms = config.period_ms(PRESENCE)
         self._land_ms = config.period_ms(FLORA)
         self._tick_ms = math.gcd(self._creatures_ms, self._sky_ms, self._land_ms)
+
+    @property
+    def pause_offline(self) -> bool:
+        return self._pause_offline
+
+    @property
+    def time_scale(self) -> float:
+        return self._time_scale
 
     @property
     def world(self) -> World:
@@ -144,10 +157,13 @@ class Island:
         return world.t_ms < world.presence.ready_t_ms
 
     def miracle_status(self) -> dict[str, Any]:
-        """Status of the weekly god-power miracle and real solar cycle (for the kiosk UI)."""
+        """Status of the weekly god-power miracle and daylight cycle (for the kiosk UI)."""
         world = self.world
         cfg = world.config.presence
         remaining_ms = max(0, world.presence.ready_t_ms - world.t_ms)
+        phase_remaining_ms = (
+            max(0, world.presence.phase_end_ms - world.t_ms) if cfg.alternating_cycle else 0
+        )
         needs = {p.value: round(v, 3) for p, v in world.presence.needs(world.instant).items()}
         closed = [p.value for p in world.presence.closed()]
         return {
@@ -161,6 +177,10 @@ class Island:
                 solar_elevation(world.unix_ms, lat=cfg.latitude, lon=cfg.longitude), 1
             ),
             "light": round(float(world.presence.light), 3),
+            "time_scale": round(self._time_scale, 3),
+            "alternating_cycle": bool(cfg.alternating_cycle),
+            "daylight_phase": "day" if world.presence.present else "night",
+            "phase_remaining_ms": phase_remaining_ms,
         }
 
     def _timed(self, work: Callable[[], _T]) -> _T:
@@ -184,7 +204,8 @@ class Island:
         else:
             self._world = World.restore(self._config, loaded.value)
             log.info("loaded %s (world %d)", loaded.path.name, self._world.number)
-            opened = Opened(loaded.path, loaded.skipped, max(0, now_ms - self._world.unix_ms))
+            caught_up_ms = 0 if self._pause_offline else max(0, now_ms - self._world.unix_ms)
+            opened = Opened(loaded.path, loaded.skipped, caught_up_ms)
             if opened.caught_up_ms > 0:
                 self._catch_up(now_ms)
                 # What was caught up is not lost to a crash before the next midnight.

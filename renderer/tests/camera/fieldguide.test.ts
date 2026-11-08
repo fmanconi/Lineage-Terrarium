@@ -258,13 +258,14 @@ describe("Herd speciesGuide census on recorded island", () => {
 
 describe("Bottom-right KeyBar", () => {
   it("paints crisp keycaps and adapts hints to open guide tabs", () => {
-    const closed = hintsForState(false, "species", "ready", true);
-    expect(closed.map((h) => h.id)).toEqual(["view", "guide", "night", "miracle"]);
+    const closed = hintsForState(false, "species", "ready", true, true);
+    expect(closed.map((h) => h.id)).toEqual(["view", "guide", "night", "miracle", "fullscreen"]);
     expect(closed.find((h) => h.id === "night")?.dot).toBe("moon-on");
+    expect(closed.find((h) => h.id === "fullscreen")?.dot).toBe("full-on");
     const painted = paintKeyBar(closed);
-    expect(painted.picture.width).toBeLessThan(260);
+    expect(painted.picture.width).toBeLessThan(285);
     expect(painted.picture.height).toBeLessThan(24);
-    expect(painted.boxes).toHaveLength(4);
+    expect(painted.boxes).toHaveLength(5);
   });
 
   it("auto-hides after 10s of stillness and wakes on activity", () => {
