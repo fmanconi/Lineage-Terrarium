@@ -130,6 +130,7 @@ import { SeasonalFlairMod } from "./mods/builtin/seasons-flair";
 import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
+import { FormicariumMod } from "./mods/builtin/formicarium";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -433,6 +434,7 @@ async function start(): Promise<void> {
   mods.register(new BiophonyMod());
   const xlScale = new XlScaleMod();
   mods.register(xlScale);
+  mods.register(new FormicariumMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
