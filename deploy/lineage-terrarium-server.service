@@ -1,0 +1,43 @@
+# Lineage: Terrarium — the island server, as a systemd user unit (docs/terrarium-kiosk.md).
+#
+# Install:
+#   cp deploy/lineage-terrarium-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lineage-terrarium-server.service
+#   loginctl enable-linger "$USER"     # keep it running without a login
+#
+# It expects the repository in ~/Lineage-Terrarium (with `uv sync` done and the kiosk
+# build in renderer/dist-kiosk) and keeps the island in ~/lineage-data. Change the paths
+# below if yours differ.
+
+[Unit]
+Description=Lineage: Terrarium island server (real solar cycle)
+Documentation=https://github.com/fmanconi/Lineage
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Lineage-Terrarium
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=%h/Lineage-Terrarium/.venv/bin/python -m lineage_server.main \
+    --data %h/lineage-data \
+    --dist %h/Lineage-Terrarium/renderer/dist-kiosk \
+    --config %h/Lineage-Terrarium/sim/config/terrarium.toml \
+    --settings %h/Lineage-Terrarium/server/config/server.toml \
+    --solar \
+    --headless
+
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+# SIGTERM makes the server save the island atomically before it stops (up to 30 s).
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

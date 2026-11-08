@@ -1,0 +1,33 @@
+# Lineage: Terrarium — the full-screen Chromium kiosk, as a systemd user unit
+# (docs/terrarium-kiosk.md). It waits for lineage-terrarium-server.service to answer on
+# /status, then opens the scene through deploy/terrarium-kiosk.sh --browser-only, which
+# finds chromium, chromium-browser or google-chrome (or LINEAGE_BROWSER).
+#
+# Install:
+#   cp deploy/lineage-terrarium-kiosk.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lineage-terrarium-kiosk.service
+#
+# DISPLAY and XAUTHORITY below fit an X11 session on display :0; on Wayland set
+# WAYLAND_DISPLAY instead (see the guide).
+
+[Unit]
+Description=Lineage: Terrarium kiosk screensaver (Chromium)
+Documentation=https://github.com/fmanconi/Lineage
+Wants=lineage-terrarium-server.service
+After=lineage-terrarium-server.service graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Lineage-Terrarium
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+Environment=LINEAGE_PORT=8080
+
+ExecStart=/usr/bin/env bash %h/Lineage-Terrarium/deploy/terrarium-kiosk.sh --browser-only
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
