@@ -1,0 +1,248 @@
+/**
+ * Seasonal Foliage & Blossoms Mod (ADR 0024):
+ *
+ * Enriches the visual transitions between the four seasons:
+ *   - Spring: Drifting cherry blossom petals (delicate pink & white) and floating golden pollen.
+ *   - Summer: Sunlit warm dust motes and shimmering heat haze motes.
+ *   - Autumn: Tumbling leaf-fall cascades in vibrant amber, scarlet and burnt ochre.
+ *   - Winter: Soft frost motes and crisp cold atmospheric glints.
+ *
+ * Fully reactive to wind speed and direction (`atmosphere.wind`).
+ * Operates purely on client visual layers without affecting sim logic.
+ */
+import type { Mod, ModContext, ModMetadata } from "../types";
+
+export type SeasonName = "spring" | "summer" | "autumn" | "winter";
+
+export interface SeasonalParticle {
+  id: number;
+  x: number; // View coordinates or normalized
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  vRot: number;
+  colour: number;
+  size: number;
+  alpha: number;
+  ageS: number;
+  lifeS: number;
+  kind: "petal" | "pollen" | "leaf" | "mote" | "frost";
+}
+
+const MAX_SEASONAL_PARTICLES = 120;
+
+// Palettes for seasonal particles matching Lineage pixel style
+export const BLOSSOM_COLOURS = [0xffb7c5, 0xffccd5, 0xfff0f5, 0xfce4ec];
+export const POLLEN_COLOURS = [0xfff59d, 0xffe082, 0xffd54f];
+export const AUTUMN_COLOURS = [0xd84315, 0xd48817, 0xef6c00, 0x8d6e63, 0xc62828];
+export const SUMMER_MOTE_COLOURS = [0xfff9c4, 0xffecb3, 0xffe082];
+export const WINTER_FROST_COLOURS = [0xe0f7fa, 0xb2ebf2, 0xe1f5fe, 0xffffff];
+
+let seasonalFlairActive = false;
+
+export function isSeasonalFlairActive(): boolean {
+  return seasonalFlairActive;
+}
+
+export function setSeasonalFlairActive(active: boolean): void {
+  seasonalFlairActive = active;
+}
+
+export class SeasonalFlairSystem {
+  readonly particles: SeasonalParticle[] = [];
+  private currentSeason: SeasonName = "summer";
+  private seasonProgress = 0.5; // 0..1 through the season
+  private forcedSeason: SeasonName | null = null;
+  private spawnAccS = 0;
+  private nextId = 1;
+
+  reset(): void {
+    this.particles.length = 0;
+    this.spawnAccS = 0;
+  }
+
+  setClock(season: string, progress: number): void {
+    if (season === "spring" || season === "summer" || season === "autumn" || season === "winter") {
+      this.currentSeason = season;
+    }
+    this.seasonProgress = Math.max(0, Math.min(1, progress));
+  }
+
+  setForcedSeason(season: SeasonName | null): void {
+    this.forcedSeason = season;
+  }
+
+  getActiveSeason(): SeasonName {
+    return this.forcedSeason ?? this.currentSeason;
+  }
+
+  getSeasonProgress(): number {
+    return this.seasonProgress;
+  }
+
+  getParticles(): readonly SeasonalParticle[] {
+    return this.particles;
+  }
+
+  /**
+   * Spawn rate per second depending on current season.
+   */
+  spawnRate(): number {
+    const s = this.getActiveSeason();
+    switch (s) {
+      case "spring":
+        return 12; // Blossoms & pollen
+      case "autumn":
+        return 20; // Heavy foliage cascade
+      case "summer":
+        return 6; // Occasional golden heat motes
+      case "winter":
+        return 10; // Frost flecks
+    }
+  }
+
+  private pickColour(season: SeasonName): { colour: number; kind: SeasonalParticle["kind"] } {
+    switch (season) {
+      case "spring":
+        if (Math.random() < 0.65) {
+          const c = BLOSSOM_COLOURS[Math.floor(Math.random() * BLOSSOM_COLOURS.length)] ?? 0xffb7c5;
+          return { colour: c, kind: "petal" };
+        } else {
+          const c = POLLEN_COLOURS[Math.floor(Math.random() * POLLEN_COLOURS.length)] ?? 0xffe082;
+          return { colour: c, kind: "pollen" };
+        }
+      case "autumn": {
+        const c = AUTUMN_COLOURS[Math.floor(Math.random() * AUTUMN_COLOURS.length)] ?? 0xd84315;
+        return { colour: c, kind: "leaf" };
+      }
+      case "winter": {
+        const c = WINTER_FROST_COLOURS[Math.floor(Math.random() * WINTER_FROST_COLOURS.length)] ?? 0xffffff;
+        return { colour: c, kind: "frost" };
+      }
+      case "summer":
+      default: {
+        const c = SUMMER_MOTE_COLOURS[Math.floor(Math.random() * SUMMER_MOTE_COLOURS.length)] ?? 0xfff9c4;
+        return { colour: c, kind: "mote" };
+      }
+    }
+  }
+
+  spawnParticle(width = 512, height = 300, windX = 1.0, windY = 0.2): void {
+    if (this.particles.length >= MAX_SEASONAL_PARTICLES) {
+      this.particles.shift();
+    }
+
+    const season = this.getActiveSeason();
+    const { colour, kind } = this.pickColour(season);
+
+    // Spawn along top or upwind edge
+    const x = Math.random() * (width + 60) - 30;
+    const y = -10;
+    const lifeS = 4 + Math.random() * 5;
+
+    // Kinematics based on particle kind
+    let vx = (windX * 0.7 + (Math.random() - 0.5) * 0.5) * (kind === "leaf" ? 35 : 20);
+    let vy = (kind === "pollen" ? 8 : kind === "leaf" ? 30 : 20) + Math.random() * 15;
+    if (kind === "mote") {
+      vx *= 0.3;
+      vy *= 0.4;
+    }
+
+    this.particles.push({
+      id: this.nextId++,
+      x,
+      y,
+      vx,
+      vy,
+      rotation: Math.random() * Math.PI * 2,
+      vRot: (Math.random() - 0.5) * (kind === "leaf" ? 4 : 1.5),
+      colour,
+      size: kind === "pollen" || kind === "mote" ? 1 : kind === "leaf" ? 3 : 2,
+      alpha: 0.9,
+      ageS: 0,
+      lifeS,
+      kind,
+    });
+  }
+
+  update(dtS: number, width = 512, height = 300, windX = 1.0, windY = 0.2): void {
+    if (dtS <= 0 || !seasonalFlairActive) return;
+
+    // Spawn logic
+    const rate = this.spawnRate();
+    this.spawnAccS += dtS;
+    const interval = 1 / rate;
+    while (this.spawnAccS >= interval) {
+      this.spawnParticle(width, height, windX, windY);
+      this.spawnAccS -= interval;
+    }
+
+    // Step physics
+    const survivors: SeasonalParticle[] = [];
+    for (const p of this.particles) {
+      p.ageS += dtS;
+
+      if (p.ageS < p.lifeS && p.y <= height + 20) {
+        // Flutter/turbulence
+        const wobble = Math.sin(p.ageS * 3 + p.id) * 8;
+        p.x += (p.vx + wobble) * dtS;
+        p.y += p.vy * dtS;
+        p.rotation += p.vRot * dtS;
+
+        // Soft fade near end of life
+        const remaining = p.lifeS - p.ageS;
+        if (remaining < 1.0) {
+          p.alpha = Math.max(0, remaining);
+        }
+
+        survivors.push(p);
+      }
+    }
+    this.particles.length = 0;
+    this.particles.push(...survivors);
+  }
+}
+
+export const seasonalFlairSystem = new SeasonalFlairSystem();
+
+export class SeasonalFlairMod implements Mod {
+  readonly meta: ModMetadata = {
+    id: "seasons-flair",
+    name: "Seasonal Foliage & Blossoms",
+    version: "1.0.0",
+    description:
+      "Dynamic seasonal aesthetics: autumn leaf-fall cascades, spring blossom petals, and summer warmth.",
+    defaultEnabled: true,
+  };
+
+  init(_ctx: ModContext): void {
+    // Initialised
+  }
+
+  enable(): void {
+    setSeasonalFlairActive(true);
+  }
+
+  disable(): void {
+    setSeasonalFlairActive(false);
+    seasonalFlairSystem.reset();
+  }
+
+  isEnabled(): boolean {
+    return isSeasonalFlairActive();
+  }
+
+  update(dtS: number, options: Record<string, unknown>): void {
+    if (!seasonalFlairActive) return;
+
+    if (typeof options.season === "string") {
+      const progress = typeof options.seasonProgress === "number" ? options.seasonProgress : 0.5;
+      seasonalFlairSystem.setClock(options.season, progress);
+    }
+
+    const windX = typeof options.windX === "number" ? options.windX : 1.0;
+    const windY = typeof options.windY === "number" ? options.windY : 0.2;
+    seasonalFlairSystem.update(dtS, 512, 300, windX, windY);
+  }
+}

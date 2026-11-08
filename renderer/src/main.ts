@@ -125,6 +125,10 @@ import {
 } from "./mods/builtin/dramatic-director";
 import { PackWarfareMod } from "./mods/builtin/pack-warfare";
 import { PurposefulWandererMod } from "./mods/builtin/wanderer";
+import { FootprintsTrailsMod } from "./mods/builtin/trails";
+import { SeasonalFlairMod } from "./mods/builtin/seasons-flair";
+import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
+import { BiophonyMod } from "./mods/builtin/biophony";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -421,6 +425,10 @@ async function start(): Promise<void> {
   mods.register(new ChristmasMod());
   mods.register(new PackWarfareMod());
   mods.register(new DramaticDirectorMod());
+  mods.register(new FootprintsTrailsMod());
+  mods.register(new SeasonalFlairMod());
+  mods.register(new EcoHeatmapMod());
+  mods.register(new BiophonyMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
@@ -464,7 +472,7 @@ async function start(): Promise<void> {
       if (isDramaticDirectorActive()) {
         for (const born of message.born) {
           const sp = herd.speciesOf(born.id) ?? 0;
-          const pos = herd.roster.where.get(born.id);
+          const pos = herd.whereOf(born.id);
           dramaticDirector.recordBirth(
             born.id,
             born.parent,
@@ -476,7 +484,7 @@ async function start(): Promise<void> {
         }
         if (message.died) {
           for (const dead of message.died) {
-            const pos = herd.roster.where.get(dead.id);
+            const pos = herd.whereOf(dead.id);
             dramaticDirector.recordDeath(
               dead.id,
               dead.cause,
@@ -1383,8 +1391,28 @@ async function start(): Promise<void> {
       scrollShowing,
       lamp,
     };
-    // The frame's state for the mods: the key bar's options, which the dashboard mod reads.
-    mods.dispatchUpdate(dtS, barOptions);
+    // The frame's state for the mods: key bar options and environmental telemetry
+    const atmoState = atmosphere.state;
+    const isRaining = atmoState.rain !== "none";
+    const rainLevel =
+      atmoState.rain === "storm" ? 1.0 : atmoState.rain === "thunder" ? 0.8 : isRaining ? 0.6 : 0;
+    const windSpeed = atmosphere.wind ? atmosphere.wind.strength : 1.0;
+    const isNight = atmoState.light < 0.25;
+    const isThunder = atmoState.rain === "thunder" || atmoState.rain === "storm";
+
+    const modOptions: Record<string, unknown> = {
+      ...barOptions,
+      rain: rainLevel,
+      windSpeed,
+      windX: windSpeed,
+      windY: 0.2,
+      isNight,
+      thunder: isThunder,
+      animals: herd.subjects(),
+      season: lastClock?.season,
+      seasonProgress: lastClock?.season_progress,
+    };
+    mods.dispatchUpdate(dtS, modOptions);
     modMenu.update(dtS, lamp);
 
     if (showcase !== null && overlay !== null) {

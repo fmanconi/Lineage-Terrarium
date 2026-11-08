@@ -137,6 +137,20 @@ export class DramaticDirectorEngine {
     });
   }
 
+  /** Register courtship / mating pair. */
+  recordCourtship(idA: number, idB: number, x: number, y: number): void {
+    this.recordEvent({
+      id: `court-${idA}-${idB}-${Math.round(performance.now())}`,
+      type: "courtship",
+      subjectId: idA,
+      x,
+      y,
+      score: 70,
+      label: "Corteggiamento",
+      durationS: 15,
+    });
+  }
+
   /** Register a predation pursuit. */
   recordHunt(hunterId: number, preyId: number, x: number, y: number): void {
     this.recordEvent({
@@ -217,28 +231,30 @@ export class DramaticDirectorEngine {
       // Pick the highest scoring event (with slight jitter for variety among equals)
       valid.sort((a, b) => b.score - a.score + (random() * 5 - 2.5));
       const chosen = valid[0];
-      let subject: Subject | null = null;
-      if (chosen.subjectId > 0) {
-        subject = scene.subjects.find((s) => s.id === chosen.subjectId) ?? null;
-      } else {
-        let bestDist = Infinity;
-        for (const s of scene.subjects) {
-          if (s.id === without) continue;
-          const d = Math.hypot(s.x - chosen.x, s.y - chosen.y);
-          if (d < bestDist) {
-            bestDist = d;
-            subject = s;
+      if (chosen !== undefined) {
+        let subject: Subject | null = null;
+        if (chosen.subjectId > 0) {
+          subject = scene.subjects.find((s) => s.id === chosen.subjectId) ?? null;
+        } else {
+          let bestDist = Infinity;
+          for (const s of scene.subjects) {
+            if (s.id === without) continue;
+            const d = Math.hypot(s.x - chosen.x, s.y - chosen.y);
+            if (d < bestDist) {
+              bestDist = d;
+              subject = s;
+            }
           }
         }
-      }
-      if (subject !== null) {
-        this.activeEvent = chosen;
-        this.activeLabel = chosen.label;
-        this.labelTimer = BADGE_DISPLAY_S;
-        this.lastSubjectId = subject.id;
-        const idx = this.events.indexOf(chosen);
-        if (idx >= 0) this.events.splice(idx, 1);
-        return subject;
+        if (subject !== null) {
+          this.activeEvent = chosen;
+          this.activeLabel = chosen.label;
+          this.labelTimer = BADGE_DISPLAY_S;
+          this.lastSubjectId = subject.id;
+          const idx = this.events.indexOf(chosen);
+          if (idx >= 0) this.events.splice(idx, 1);
+          return subject;
+        }
       }
     }
 
@@ -295,7 +311,8 @@ export class DramaticDirectorEngine {
 
   private prune(now: number): void {
     for (let i = this.events.length - 1; i >= 0; i--) {
-      if (now - this.events[i].timestamp > EVENT_TTL_S) {
+      const event = this.events[i];
+      if (event !== undefined && now - event.timestamp > EVENT_TTL_S) {
         this.events.splice(i, 1);
       }
     }
@@ -427,8 +444,10 @@ export class DramaticDirectorMod implements Mod {
   private badge: DramaticBadge | null = null;
 
   init(ctx: ModContext): void {
-    this.badge = new DramaticBadge(ctx.width, ctx.height);
-    ctx.frame.appendChild(this.badge.element);
+    if (typeof document !== "undefined") {
+      this.badge = new DramaticBadge(ctx.width, ctx.height);
+      ctx.frame?.appendChild?.(this.badge.element);
+    }
   }
 
   enable(): void {

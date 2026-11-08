@@ -1117,6 +1117,11 @@ export class Herd {
     return this.roster.species.get(id) ?? 0;
   }
 
+  /** Coordinates of animal `id` in cells, if placed on the island. */
+  whereOf(id: number): { x: number; y: number } | undefined {
+    return this.roster.where.get(id);
+  }
+
   /**
    * Draw the animals for `view` with `cells` in sight, moved on by `dtS`: among the
    * plants of `plants` (the view's opaque layer), what stands in front of `subject` shown

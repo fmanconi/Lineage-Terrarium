@@ -142,6 +142,7 @@ import { envenom } from "./venom";
 import { WAKE_EVERY_PX, WAKE_FROM, wakePair } from "./wake";
 import type { Random } from "../rng";
 import { isChristmasActive } from "../mods/builtin/christmas";
+import { isDramaticDirectorActive, dramaticDirector } from "../mods/builtin/dramatic-director";
 import { isPackWarfareActive } from "../mods/builtin/pack-warfare";
 import {
   newPackState,
@@ -1033,6 +1034,9 @@ export class CreatureLayer {
       const lasts = walk + COURT_TOUCH_S;
       mate.court = { with: motherIndex, age: 0, touch: walk, lasts, side: 0 };
       mother.court = { with: mateIndex, age: 0, touch: walk, lasts, side };
+      if (isDramaticDirectorActive()) {
+        dramaticDirector.recordCourtship(0, 0, (head.x + x) / 2, (head.y + y) / 2);
+      }
       this.nurseryPool().love(
         { x: (head.x + x) / 2, y: (head.y + y) / 2 },
         walk + COURT_TOUCH_S * COURT_HEARTS_FROM,
@@ -1812,6 +1816,9 @@ export class CreatureLayer {
   /** Sparks rising between two rivals facing off at (x, y), cells. */
   private skirmish(x: number, y: number): void {
     if (this.showing !== "bodies") return;
+    if (isDramaticDirectorActive()) {
+      dramaticDirector.recordClash(0, 0, x, y);
+    }
     const pool = this.sparkPool();
     const kind = skirmishKind();
     for (let k = 0; k < SKIRMISH_SPARKS; k++) {
