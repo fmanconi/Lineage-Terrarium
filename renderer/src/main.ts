@@ -118,6 +118,11 @@ import { createFrameCap } from "./framecap";
 import { KeyBar } from "./keybar";
 import { ChristmasMod } from "./mods/builtin/christmas";
 import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
+import {
+  DramaticDirectorMod,
+  dramaticDirector,
+  isDramaticDirectorActive,
+} from "./mods/builtin/dramatic-director";
 import { PackWarfareMod } from "./mods/builtin/pack-warfare";
 import { PurposefulWandererMod } from "./mods/builtin/wanderer";
 import { loadUserMods } from "./mods/loader";
@@ -415,6 +420,7 @@ async function start(): Promise<void> {
   mods.register(new PurposefulWandererMod());
   mods.register(new ChristmasMod());
   mods.register(new PackWarfareMod());
+  mods.register(new DramaticDirectorMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
@@ -453,7 +459,47 @@ async function start(): Promise<void> {
       lastClock = message;
     }
     if (message.type === "sky") lastSky = message;
-    if (message.type === "creatures") lastCreatures = message;
+    if (message.type === "creatures") {
+      lastCreatures = message;
+      if (isDramaticDirectorActive()) {
+        for (const born of message.born) {
+          const sp = herd.speciesOf(born.id) ?? 0;
+          const pos = herd.roster.where.get(born.id);
+          dramaticDirector.recordBirth(
+            born.id,
+            born.parent,
+            born.slots ?? 0,
+            sp,
+            pos?.x ?? 0,
+            pos?.y ?? 0,
+          );
+        }
+        if (message.died) {
+          for (const dead of message.died) {
+            const pos = herd.roster.where.get(dead.id);
+            dramaticDirector.recordDeath(
+              dead.id,
+              dead.cause,
+              dead.by,
+              pos?.x ?? 0,
+              pos?.y ?? 0,
+            );
+          }
+        }
+      }
+    }
+    if (message.type === "events" && isDramaticDirectorActive()) {
+      for (const ev of message.events) {
+        if (
+          ev.kind === "volcano" ||
+          ev.kind === "crater" ||
+          ev.kind === "earthquake" ||
+          ev.kind === "fire_started"
+        ) {
+          dramaticDirector.recordDisaster(ev.kind, ev.x ?? 0, ev.y ?? 0);
+        }
+      }
+    }
     if ("t_ms" in message) lastMs = message.t_ms;
     if (message.type === "chronicle") {
       captions.take(message, date);

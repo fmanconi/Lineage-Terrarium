@@ -19,6 +19,7 @@
  */
 import { Spring, Velocity, framing, within, type Point, type SpringOptions } from "./camera";
 import type { ViewName } from "./landscape";
+import { isDramaticDirectorActive, dramaticDirector } from "./mods/builtin/dramatic-director";
 import type { Random } from "./rng";
 
 /** Back to the map after this long without a press (seconds; the owner, 2026-10-20). */
@@ -406,7 +407,10 @@ export class Director {
 
   // The local view.
 
-  private followTime(): number {
+  private followTime(subject: Subject | null = null): number {
+    if (isDramaticDirectorActive()) {
+      return dramaticDirector.currentFollowTime(subject, this.random);
+    }
     return between(this.random, this.timings.followMinS, this.timings.followMaxS);
   }
 
@@ -460,6 +464,10 @@ export class Director {
   }
 
   private choose(scene: Scene, current: number | null): Subject | null {
+    if (isDramaticDirectorActive()) {
+      const dramatic = dramaticDirector.chooseNext(scene, current, this.random);
+      if (dramatic !== null) return dramatic;
+    }
     const others = scene.subjects.filter((subject) => subject.id !== current);
     const pool = others.length > 0 ? others : scene.subjects;
     if (pool.length === 0) return null;
@@ -480,10 +488,21 @@ export class Director {
     if (this.visiting(dtS, scene)) return;
     this.follow -= dtS;
     let subject = scene.subjects.find((candidate) => candidate.id === this.subject) ?? null;
+
+    if (isDramaticDirectorActive() && this.dip === null && subject !== null) {
+      if (subject.torpid && this.follow > 12) {
+        this.follow = 12;
+      }
+      const urgent = dramaticDirector.peekUrgent(scene, this.subject);
+      if (urgent !== null && this.follow < 15) {
+        this.follow = 0;
+      }
+    }
+
     if (subject === null || (this.follow <= 0 && this.dip === null)) {
       // Its time is up, or it died: on to the next.
       const next = this.takeUpcoming(scene, this.subject) ?? this.choose(scene, this.subject);
-      this.follow = this.followTime();
+      this.follow = this.followTime(next);
       if (next === null) {
         this.subject = null;
         return;
