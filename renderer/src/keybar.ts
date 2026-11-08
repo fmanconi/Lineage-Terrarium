@@ -46,6 +46,8 @@ const FULL_OFF_BITMAP = ["##.##", "#...#", ".....", "#...#", "##.##"] as const;
 const FULL_ON_BITMAP = [".#.#.", "##.##", ".....", "##.##", ".#.#."] as const;
 const PIP_OFF_BITMAP = ["#####", "#...#", "#..##", "#..##", "#####"] as const;
 const PIP_ON_BITMAP = ["#####", "#...#", "#.###", "#.###", "#####"] as const;
+const AUDIO_ON_BITMAP = ["..#..", ".##.#", "#####", ".##.#", "..#.."] as const;
+const AUDIO_OFF_BITMAP = ["..#..", ".##..", "#####", ".##..", "..#.#"] as const;
 
 /** Pixel arrow glyphs (11x7) for keycaps so no character outside `pixelfont.ts` is needed. */
 export const ARROW_BITMAPS = {
@@ -78,7 +80,16 @@ export interface KeyHint {
   label: string;
   /** Optional status gem, crescent moon, fullscreen corner glyph, or PiP miniature window glyph. */
   dot?:
-    "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on" | "pip-off" | "pip-on";
+    | "ready"
+    | "cooldown"
+    | "moon-off"
+    | "moon-on"
+    | "full-off"
+    | "full-on"
+    | "pip-off"
+    | "pip-on"
+    | "audio-off"
+    | "audio-on";
 }
 
 export type GuideTab = "species" | "lineage" | "island";
@@ -91,6 +102,7 @@ export function hintsForState(
   sleepMode = false,
   fullscreen = false,
   pip = false,
+  audioMuted = false,
 ): KeyHint[] {
   if (!guideOpen) {
     return [
@@ -109,7 +121,7 @@ export function hintsForState(
         dot: sleepMode ? "moon-on" : "moon-off",
       },
       { id: "mods", key: { kind: "text", text: "M" }, label: "Mods" },
-      // Fullscreen and PiP are told by their glyphs alone, so the bar stays narrow.
+      // Fullscreen, PiP and Audio are told by their glyphs alone, so the bar stays narrow.
       {
         id: "fullscreen",
         key: { kind: "text", text: "F" },
@@ -121,6 +133,12 @@ export function hintsForState(
         key: { kind: "text", text: "P" },
         label: "",
         dot: pip ? "pip-on" : "pip-off",
+      },
+      {
+        id: "audio",
+        key: { kind: "text", text: "U" },
+        label: "",
+        dot: audioMuted ? "audio-off" : "audio-on",
       },
     ];
   }
@@ -224,7 +242,9 @@ function hintWidth(hint: KeyHint): number {
     hint.dot === "full-off" ||
     hint.dot === "full-on" ||
     hint.dot === "pip-off" ||
-    hint.dot === "pip-on";
+    hint.dot === "pip-on" ||
+    hint.dot === "audio-off" ||
+    hint.dot === "audio-on";
   return base + DOT_GAP + (is5px ? 5 : DOT_SIZE);
 }
 
@@ -289,10 +309,15 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
         hint.dot === "full-off" ||
         hint.dot === "full-on" ||
         hint.dot === "pip-off" ||
-        hint.dot === "pip-on"
+        hint.dot === "pip-on" ||
+        hint.dot === "audio-off" ||
+        hint.dot === "audio-on"
       ) {
         const iconCol =
-          hint.dot === "moon-on" || hint.dot === "full-on" || hint.dot === "pip-on"
+          hint.dot === "moon-on" ||
+          hint.dot === "full-on" ||
+          hint.dot === "pip-on" ||
+          hint.dot === "audio-on"
             ? MOON_ON
             : MOON_OFF;
         const bitmap =
@@ -304,7 +329,11 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
                 ? PIP_ON_BITMAP
                 : hint.dot === "pip-off"
                   ? PIP_OFF_BITMAP
-                  : MOON_BITMAP;
+                  : hint.dot === "audio-on"
+                    ? AUDIO_ON_BITMAP
+                    : hint.dot === "audio-off"
+                      ? AUDIO_OFF_BITMAP
+                      : MOON_BITMAP;
         const my = top + 3;
         bitmap.forEach((row, r) => {
           [...row].forEach((ch, c) => {
@@ -397,6 +426,7 @@ export class KeyBar {
       sleepMode?: boolean;
       fullscreen?: boolean;
       pip?: boolean;
+      audioMuted?: boolean;
       scrollShowing: boolean;
       lamp?: Rgb;
     },
@@ -410,6 +440,7 @@ export class KeyBar {
       sleepMode = false,
       fullscreen = false,
       pip = false,
+      audioMuted = false,
       scrollShowing,
       lamp = DAYLIGHT,
     } = options;
@@ -434,7 +465,7 @@ export class KeyBar {
       return;
     }
 
-    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode, fullscreen, pip);
+    const hints = hintsForState(guideOpen, tab, miracleDot, sleepMode, fullscreen, pip, audioMuted);
     const key = JSON.stringify([hints, lampKey(lamp)]);
     const share = (v: number, total: number): string => `${(100 * v) / total}%`;
 

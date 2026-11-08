@@ -186,4 +186,42 @@ describe("Biophony & Soundscape Mod", () => {
     expect(biophonyEngine.thunderCooldownS).toBeCloseTo(THUNDER_COOLDOWN_S - 29 / 30, 5);
     mod.disable();
   });
+
+  it("handles keyboard audio controls (mute, volume adjustments, reset)", () => {
+    const mod = new BiophonyMod();
+    mod.init({ frame: {} as HTMLElement, width: 512, height: 300, storage: memoryStorage() });
+    mod.enable();
+
+    biophonyEngine.setVolume(0.7);
+    biophonyEngine.setMuted(false);
+
+    // Mute toggle [U]
+    expect(mod.onKey({ key: "u" } as KeyboardEvent)).toBe(true);
+    expect(biophonyEngine.getSettings().muted).toBe(true);
+    expect(mod.onKey({ key: "U" } as KeyboardEvent)).toBe(true);
+    expect(biophonyEngine.getSettings().muted).toBe(false);
+
+    // Volume up [+]
+    expect(mod.onKey({ key: "+" } as KeyboardEvent)).toBe(true);
+    expect(biophonyEngine.getSettings().volume).toBeCloseTo(0.8, 2);
+
+    // Volume down [-]
+    expect(mod.onKey({ key: "-" } as KeyboardEvent)).toBe(true);
+    expect(biophonyEngine.getSettings().volume).toBeCloseTo(0.7, 2);
+
+    // Volume reset [0]
+    expect(mod.onKey({ key: "0" } as KeyboardEvent)).toBe(true);
+    expect(biophonyEngine.getSettings().volume).toBeCloseTo(0.75, 2);
+
+    // Unrelated key
+    expect(mod.onKey({ key: "x" } as KeyboardEvent)).toBe(false);
+
+    // Toggle mute and toast method
+    expect(mod.toggleMuteAndToast()).toBe(true);
+    expect(biophonyEngine.getSettings().muted).toBe(true);
+    expect(mod.toggleMuteAndToast()).toBe(false);
+    expect(biophonyEngine.getSettings().muted).toBe(false);
+
+    mod.disable();
+  });
 });

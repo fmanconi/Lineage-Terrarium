@@ -128,7 +128,7 @@ import { PurposefulWandererMod } from "./mods/builtin/wanderer";
 import { FootprintsTrailsMod } from "./mods/builtin/trails";
 import { SeasonalFlairMod } from "./mods/builtin/seasons-flair";
 import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
-import { BiophonyMod } from "./mods/builtin/biophony";
+import { BiophonyMod, biophonyEngine, isBiophonyActive } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { FormicariumMod } from "./mods/builtin/formicarium";
 import { loadUserMods } from "./mods/loader";
@@ -431,7 +431,8 @@ async function start(): Promise<void> {
   mods.register(new FootprintsTrailsMod());
   mods.register(new SeasonalFlairMod());
   mods.register(new EcoHeatmapMod());
-  mods.register(new BiophonyMod());
+  const biophonyMod = new BiophonyMod();
+  mods.register(biophonyMod);
   const xlScale = new XlScaleMod();
   mods.register(xlScale);
   mods.register(new FormicariumMod());
@@ -974,6 +975,7 @@ async function start(): Promise<void> {
       else if (barHit === "night") toggleSleep();
       else if (barHit === "fullscreen") void toggleFullscreen();
       else if (barHit === "pip") void togglePiP();
+      else if (barHit === "audio") biophonyMod.toggleMuteAndToast();
       else if (barHit === "view") {
         fieldGuide.close();
         press();
@@ -1431,6 +1433,7 @@ async function start(): Promise<void> {
       sleepMode: settings.sleepMode,
       fullscreen: isFullscreen,
       pip: isPiP,
+      audioMuted: biophonyEngine.getSettings().muted || !isBiophonyActive(),
       scrollShowing,
       lamp,
     };

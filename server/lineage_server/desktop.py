@@ -418,7 +418,9 @@ def _run_desktop(args: argparse.Namespace) -> None:
     window.events.shown += lambda: _apply_window_decorations(window)
     try:
         log.info("Starting webview event loop")
-        webview.start(debug=False)
+        profile_dir = str(args.data / "webview_profile")
+        Path(profile_dir).mkdir(parents=True, exist_ok=True)
+        webview.start(debug=False, private_mode=False, storage_path=profile_dir)
         log.info("webview event loop terminated cleanly")
     finally:
         if tray is not None:

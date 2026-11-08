@@ -14,9 +14,11 @@
  * Runs cleanly in browser, kiosk and pywebview. Headless / test-safe fallback when AudioContext is absent.
  * Renderer-only: zero impact on `sim/` determinism.
  */
+import { Container, Graphics } from "pixi.js";
+import { draw, measure } from "../../pixelfont";
 import type { StorageLike } from "../../settings";
 import { MODS_STORAGE_KEY } from "../registry";
-import type { Mod, ModContext, ModMetadata } from "../types";
+import type { Mod, ModContext, ModLayers, ModMetadata } from "../types";
 
 export const BIOPHONY_STORAGE_KEY = "lineage_biophony_settings_v1";
 /** Seconds between two thunder rumbles at least: a storm lasts many frames, one rumble each. */
@@ -207,6 +209,26 @@ export class BiophonyEngine {
     this.settings.muted = muted;
     this.applyMasterGain();
     this.saveSettings();
+  }
+
+  toggleMute(): boolean {
+    this.setMuted(!this.settings.muted);
+    return this.settings.muted;
+  }
+
+  adjustVolume(delta: number): number {
+    const next = Math.max(0, Math.min(1, Math.round((this.settings.volume + delta) * 10) / 10));
+    this.setVolume(next);
+    if (this.settings.muted && delta > 0) {
+      this.setMuted(false);
+    }
+    return this.settings.volume;
+  }
+
+  resetVolume(): number {
+    this.setVolume(0.75);
+    this.setMuted(false);
+    return 0.75;
   }
 
   private applyMasterGain(): void {
@@ -537,11 +559,27 @@ export class BiophonyMod implements Mod {
     name: "Biophony & Soundscape",
     version: "1.0.0",
     description:
-      "Procedural, zero-dependency environmental audio: warm ambient terrarium drone, ocean surf, rain, and bird chirps.",
+      "Procedural environmental audio: warm terrarium drone, surf, rain, chirps. Controls: [U] Mute, [-]/[+] Level, [0] Default.",
     defaultEnabled: true,
   };
 
+  private readonly screenContainer = new Container();
+  private readonly toastGfx = new Graphics();
+  readonly layers: ModLayers = {
+    screen: this.screenContainer,
+  };
+
+  private toastTimerS = 0;
+  private screenWidth = 512;
+  private screenHeight = 300;
+
+  constructor() {
+    this.screenContainer.addChild(this.toastGfx);
+  }
+
   init(ctx: ModContext): void {
+    this.screenWidth = ctx.width;
+    this.screenHeight = ctx.height;
     biophonyEngine.init(ctx.storage);
 
     // One-time migration: ensure mod is activated even if older storage defaulted to false
@@ -564,20 +602,103 @@ export class BiophonyMod implements Mod {
   enable(): void {
     setBiophonyActive(true);
     biophonyEngine.setMuted(false);
+    this.screenContainer.visible = true;
     void biophonyEngine.resume();
   }
 
   disable(): void {
     setBiophonyActive(false);
     biophonyEngine.setMuted(true);
+    this.toastTimerS = 0;
+    this.toastGfx.clear();
+    this.screenContainer.visible = false;
   }
 
   isEnabled(): boolean {
     return isBiophonyActive();
   }
 
+  onKey(e: KeyboardEvent): boolean {
+    if (!biophonyActive) return false;
+    if (e.key === "u" || e.key === "U") {
+      biophonyEngine.toggleMute();
+      this.showToast();
+      return true;
+    }
+    if (e.key === "+" || e.key === "=" || e.key === "]") {
+      biophonyEngine.adjustVolume(0.1);
+      this.showToast();
+      return true;
+    }
+    if (e.key === "-" || e.key === "_" || e.key === "[") {
+      biophonyEngine.adjustVolume(-0.1);
+      this.showToast();
+      return true;
+    }
+    if (e.key === "0") {
+      biophonyEngine.resetVolume();
+      this.showToast();
+      return true;
+    }
+    return false;
+  }
+
+  toggleMuteAndToast(): boolean {
+    if (!biophonyActive) return false;
+    const muted = biophonyEngine.toggleMute();
+    this.showToast();
+    return muted;
+  }
+
+  showToast(): void {
+    this.toastTimerS = 2.5;
+    this.drawToast();
+  }
+
+  private drawToast(): void {
+    const g = this.toastGfx;
+    g.clear();
+    const s = biophonyEngine.getSettings();
+    const volPct = Math.round(s.volume * 100);
+    const title = s.muted ? "Soundscape: MUTED" : `Soundscape Volume: ${volPct}%`;
+    const barUnits = Math.round(s.volume * 10);
+    const bar = s.muted ? "[ SILENT ]" : `[${"#".repeat(barUnits)}${".".repeat(10 - barUnits)}]`;
+    const hint = s.muted ? "Key [U] to unmute" : "Keys: [U] Mute  [-] / [+] Volume";
+
+    const line1 = `${title}  ${bar}`;
+    const w1 = measure(line1);
+    const w2 = measure(hint);
+    const width = Math.max(w1, w2) + 12;
+    const height = 26;
+    const x0 = 8;
+    const y0 = this.screenHeight - height - 24;
+
+    // Soft shadow
+    g.rect(x0 + 1, y0 + 1, width, height).fill({ color: 0x000000, alpha: 0.35 });
+    // Wood frame edge
+    g.rect(x0, y0, width, height).fill(0x3e2418);
+    // Cream parchment card
+    g.rect(x0 + 1, y0 + 1, width - 2, height - 2).fill(0xfaf3e1);
+
+    // Pixel typography
+    draw(line1, x0 + 6, y0 + 4, (px, py) => {
+      g.rect(px, py, 1, 1).fill(0x4a2c26);
+    });
+    draw(hint, x0 + 6, y0 + 14, (px, py) => {
+      g.rect(px, py, 1, 1).fill(0x7a6855);
+    });
+  }
+
   update(dtS: number, options: Record<string, unknown>): void {
     if (!biophonyActive) return;
+
+    if (this.toastTimerS > 0) {
+      this.toastTimerS -= dtS;
+      if (this.toastTimerS <= 0) {
+        this.toastGfx.clear();
+        this.toastTimerS = 0;
+      }
+    }
 
     const rain = typeof options.rain === "number" ? options.rain : 0;
     const windSpeed = typeof options.windSpeed === "number" ? options.windSpeed : 1.0;

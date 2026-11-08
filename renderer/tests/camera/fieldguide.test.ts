@@ -281,15 +281,17 @@ describe("Bottom-right KeyBar", () => {
       "mods",
       "fullscreen",
       "pip",
+      "audio",
     ]);
     expect(closed.find((h) => h.id === "night")?.dot).toBe("moon-on");
     expect(closed.find((h) => h.id === "fullscreen")?.dot).toBe("full-on");
     expect(closed.find((h) => h.id === "pip")?.dot).toBe("pip-on");
+    expect(closed.find((h) => h.id === "audio")?.dot).toBe("audio-on");
     const painted = paintKeyBar(closed);
-    // Fullscreen and PiP by their glyphs alone: the bar fits in 321 of the scene's 512.
-    expect(painted.picture.width).toBeLessThan(330);
+    // Fullscreen, PiP and Audio by their glyphs alone: the bar fits in 350 of the scene's 512.
+    expect(painted.picture.width).toBeLessThan(350);
     expect(painted.picture.height).toBeLessThan(24);
-    expect(painted.boxes).toHaveLength(7);
+    expect(painted.boxes).toHaveLength(8);
   });
 
   it("auto-hides after 10s of stillness and wakes on activity", () => {
