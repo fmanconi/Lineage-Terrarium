@@ -131,7 +131,7 @@ import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { FormicariumMod } from "./mods/builtin/formicarium";
-import { MiniatureBadge, MiniatureManager } from "./miniature";
+import { MiniatureBadge, MiniatureManager, MiniatureToolbar } from "./miniature";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -447,6 +447,7 @@ async function start(): Promise<void> {
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   const miniature = new MiniatureManager(modStorage);
   const miniatureBadge = new MiniatureBadge(miniature, WIDTH, HEIGHT);
+  const miniatureToolbar = new MiniatureToolbar(miniature, canvas, WIDTH, HEIGHT);
   frame.append(
     captions.element,
     card.element,
@@ -454,6 +455,7 @@ async function start(): Promise<void> {
     keyBar.element,
     modMenu.element,
     miniatureBadge.element,
+    miniatureToolbar.element,
   );
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
@@ -953,16 +955,21 @@ async function start(): Promise<void> {
   window.addEventListener("pointermove", (event) => {
     if (Math.hypot(event.clientX - lastPtr.x, event.clientY - lastPtr.y) < 3) return;
     lastPtr = { x: event.clientX, y: event.clientY };
-    if (!automatedRun) keyBar.wake();
+    if (!automatedRun) {
+      keyBar.wake();
+      miniatureToolbar.wake();
+    }
   });
 
   // A click or tap steers the key bar, field guide, or steps the camera view.
   frame.addEventListener("pointerdown", (event) => {
     userInteracted = true;
     keyBar.wake();
+    miniatureToolbar.wake();
     const rect = frame.getBoundingClientRect();
     const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
     const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
+    if (miniatureToolbar.handlePointer(artX, artY)) return;
     if (modMenu.handlePointer(artX, artY)) return;
     const barHit = dashboardMod.hitAt(artX, artY);
     if (barHit !== null) {
@@ -992,11 +999,18 @@ async function start(): Promise<void> {
 
   let currentNightAlpha = settings.sleepMode ? nightVeilAlpha(1, settings.nightDimmer, true) : 0;
   let shot: Shot = { view: pinned ?? "map", centre: { x: 0, y: 0 }, dim: 0, subject: null };
-  // The mouse wheel zooms the local view in and out (Terrarium XL's macro zoom).
+  // The mouse wheel zooms the local view in and out (Terrarium XL's macro zoom) or tunes miniature.
   frame.addEventListener(
     "wheel",
     (event) => {
       if (modMenu.isOpen() || fieldGuide.open) return;
+      const rect = frame.getBoundingClientRect();
+      const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
+      const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
+      if (miniatureToolbar.handleWheel(event, artX, artY)) {
+        event.preventDefault();
+        return;
+      }
       if (xlScale.onWheel(event.deltaY, shot.view)) event.preventDefault();
     },
     { passive: false },
@@ -1462,6 +1476,7 @@ async function start(): Promise<void> {
     modMenu.update(dtS, lamp);
     miniature.update(dtS);
     miniatureBadge.update(dtS);
+    miniatureToolbar.update(dtS);
 
     if (showcase !== null && overlay !== null) {
       const { act } = showcase.now;
