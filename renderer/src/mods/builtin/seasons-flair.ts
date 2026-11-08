@@ -34,6 +34,12 @@ export interface SeasonalParticle {
 }
 
 const MAX_SEASONAL_PARTICLES = 120;
+/** Wind (`windX`) above which some particles blow in from the upwind side, and how many. */
+const SIDE_WIND = 1.2;
+const SIDE_SHARE = 0.4;
+/** How bright the particles stay in the dark (0–1), and the frost's glint threshold. */
+export const NIGHT_FLOOR = 0.35;
+const GLINT_FROM = 0.85;
 
 // Palettes for seasonal particles matching Lineage pixel style
 export const BLOSSOM_COLOURS = [0xffb7c5, 0xffccd5, 0xfff0f5, 0xfce4ec];
@@ -225,8 +231,16 @@ export class SeasonalFlairMod implements Mod {
     defaultEnabled: true,
   };
 
-  init(_ctx: ModContext): void {
-    // Initialised
+  /** The particles over the screen, in art pixels. */
+  private readonly canvas = new Graphics();
+  readonly layers: ModLayers = { screen: this.canvas };
+  private width = 512;
+  private height = 300;
+
+  init(ctx: ModContext): void {
+    this.width = ctx.width;
+    this.height = ctx.height;
+    this.canvas.visible = false;
   }
 
   enable(): void {
@@ -236,6 +250,8 @@ export class SeasonalFlairMod implements Mod {
   disable(): void {
     setSeasonalFlairActive(false);
     seasonalFlairSystem.reset();
+    this.canvas.clear();
+    this.canvas.visible = false;
   }
 
   isEnabled(): boolean {
@@ -252,6 +268,56 @@ export class SeasonalFlairMod implements Mod {
 
     const windX = typeof options.windX === "number" ? options.windX : 1.0;
     const windY = typeof options.windY === "number" ? options.windY : 0.2;
-    seasonalFlairSystem.update(dtS, 512, 300, windX, windY);
+    seasonalFlairSystem.update(dtS, this.width, this.height, windX, windY);
+
+    const light = typeof options.light === "number" ? Math.max(0, Math.min(1, options.light)) : 1;
+    this.draw(NIGHT_FLOOR + (1 - NIGHT_FLOOR) * light);
+  }
+
+  /** Every particle in whole art pixels, its shape by kind, its alpha times `lit`. */
+  private draw(lit: number): void {
+    const g = this.canvas;
+    g.clear();
+    g.visible = true;
+    for (const p of seasonalFlairSystem.getParticles()) {
+      const alpha = p.alpha * lit;
+      if (alpha <= 0) continue;
+      const x = Math.floor(p.x);
+      const y = Math.floor(p.y);
+      const fill = { color: p.colour, alpha };
+      switch (p.kind) {
+        case "petal":
+          // Two pixels, lying or standing as it turns
+          if (Math.abs(Math.cos(p.rotation)) > 0.5) g.rect(x, y, 2, 1).fill(fill);
+          else g.rect(x, y, 1, 2).fill(fill);
+          break;
+        case "leaf": {
+          // Three pixels of a 2×2 square, the missing corner turning with the leaf
+          const corner = Math.floor(((p.rotation % TAU) + TAU) / (TAU / 4)) % 4;
+          for (let k = 0; k < 4; k++) {
+            if (k === corner) continue;
+            g.rect(x + (k % 2), y + Math.floor(k / 2), 1, 1).fill(fill);
+          }
+          break;
+        }
+        case "frost":
+          g.rect(x, y, 1, 1).fill(fill);
+          // Now and then a glint: a faint cross round the fleck
+          if (Math.sin(p.ageS * 6 + p.id) > GLINT_FROM) {
+            const arm = { color: p.colour, alpha: alpha * 0.5 };
+            g.rect(x - 1, y, 1, 1).fill(arm);
+            g.rect(x + 1, y, 1, 1).fill(arm);
+            g.rect(x, y - 1, 1, 1).fill(arm);
+            g.rect(x, y + 1, 1, 1).fill(arm);
+          }
+          break;
+        case "pollen":
+        case "mote":
+          g.rect(x, y, 1, 1).fill(fill);
+          break;
+      }
+    }
   }
 }
+
+const TAU = Math.PI * 2;
