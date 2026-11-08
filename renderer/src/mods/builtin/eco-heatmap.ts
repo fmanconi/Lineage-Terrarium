@@ -71,7 +71,11 @@ export class HeatmapSystem {
     return this.mode;
   }
 
-  setFloraFromWorld(cells: readonly number[] | Float32Array, worldWidth: number, worldHeight: number): void {
+  setFloraFromWorld(
+    cells: readonly number[] | Float32Array,
+    worldWidth: number,
+    worldHeight: number,
+  ): void {
     if (cells.length === 0) return;
     this.floraGrid.fill(0);
 
@@ -116,7 +120,11 @@ export class HeatmapSystem {
     }
   }
 
-  recordFauna(animals: readonly { x: number; y: number }[], worldWidth = 64, worldHeight = 64): void {
+  recordFauna(
+    animals: readonly { x: number; y: number }[],
+    worldWidth = 64,
+    worldHeight = 64,
+  ): void {
     // Fauna grid is instantaneous density with fast decay
     this.faunaGrid.fill(0);
 
@@ -285,8 +293,9 @@ export class EcoHeatmapMod implements Mod {
   onKey(e: KeyboardEvent): boolean {
     if (!this.enabled) return false;
 
-    // Press [E]/[e] or [H]/[h] to cycle modes; "off" hides the overlay, the next press brings it back.
-    if (e.key === "e" || e.key === "E" || e.key === "h" || e.key === "H") {
+    // Press [E] or [e] to cycle modes ([h] is the field guide's); "off" hides the overlay,
+    // the next press brings it back.
+    if (e.key === "e" || e.key === "E") {
       const nextMode = heatmapSystem.cycleMode();
       setHeatmapActive(nextMode !== "off");
       this.sinceDrawS = Infinity;

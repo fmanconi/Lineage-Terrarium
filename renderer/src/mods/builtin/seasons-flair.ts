@@ -126,12 +126,14 @@ export class SeasonalFlairSystem {
         return { colour: c, kind: "leaf" };
       }
       case "winter": {
-        const c = WINTER_FROST_COLOURS[Math.floor(Math.random() * WINTER_FROST_COLOURS.length)] ?? 0xffffff;
+        const c =
+          WINTER_FROST_COLOURS[Math.floor(Math.random() * WINTER_FROST_COLOURS.length)] ?? 0xffffff;
         return { colour: c, kind: "frost" };
       }
       case "summer":
       default: {
-        const c = SUMMER_MOTE_COLOURS[Math.floor(Math.random() * SUMMER_MOTE_COLOURS.length)] ?? 0xfff9c4;
+        const c =
+          SUMMER_MOTE_COLOURS[Math.floor(Math.random() * SUMMER_MOTE_COLOURS.length)] ?? 0xfff9c4;
         return { colour: c, kind: "mote" };
       }
     }
@@ -147,18 +149,13 @@ export class SeasonalFlairSystem {
 
     // Spawn along top or, in a strong wind, the upwind edge's upper part
     const fromSide = Math.abs(windX) > SIDE_WIND && Math.random() < SIDE_SHARE;
-    const x = fromSide
-      ? windX > 0
-        ? -10
-        : width + 10
-      : Math.random() * (width + 60) - 30;
+    const x = fromSide ? (windX > 0 ? -10 : width + 10) : Math.random() * (width + 60) - 30;
     const y = fromSide ? Math.random() * height * 0.6 : -10;
     const lifeS = 4 + Math.random() * 5;
 
     // Kinematics based on particle kind
     let vx = (windX * 0.7 + (Math.random() - 0.5) * 0.5) * (kind === "leaf" ? 35 : 20);
-    let vy =
-      (kind === "pollen" ? 8 : kind === "leaf" ? 30 : 20) + Math.random() * 15 + windY * 10;
+    let vy = (kind === "pollen" ? 8 : kind === "leaf" ? 30 : 20) + Math.random() * 15 + windY * 10;
     if (kind === "mote") {
       vx *= 0.3;
       vy *= 0.4;

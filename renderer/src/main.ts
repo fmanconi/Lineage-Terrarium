@@ -132,6 +132,7 @@ import { BiophonyMod } from "./mods/builtin/biophony";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
+import type { Mod } from "./mods/types";
 import {
   SETTINGS_STORAGE_KEY,
   browserStorage,
@@ -433,7 +434,7 @@ async function start(): Promise<void> {
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
-  void loadUserMods(mods);
+  const userModsLoaded = loadUserMods(mods);
   // The showcase's lines and titles, and its frame counter with `?fps`.
   const overlay = showcasing ? new Overlay(WIDTH, HEIGHT) : null;
   if (overlay !== null) frame.append(overlay.title, overlay.line, overlay.counter);
@@ -485,13 +486,7 @@ async function start(): Promise<void> {
         if (message.died) {
           for (const dead of message.died) {
             const pos = herd.whereOf(dead.id);
-            dramaticDirector.recordDeath(
-              dead.id,
-              dead.cause,
-              dead.by,
-              pos?.x ?? 0,
-              pos?.y ?? 0,
-            );
+            dramaticDirector.recordDeath(dead.id, dead.cause, dead.by, pos?.x ?? 0, pos?.y ?? 0);
           }
         }
       }
@@ -549,6 +544,25 @@ async function start(): Promise<void> {
     marker.container,
     atmosphere.sky,
   );
+  // The mods' drawing (ADR 0024): on the ground under the plants (cells), over the scene and
+  // its light (cells, moved with the world), and over the screen (art pixels).
+  const modsOver = new Container();
+  const modsScreen = new Container();
+  modsScreen.position.set(MARGIN, MARGIN);
+  app.stage.addChild(modsOver, modsScreen);
+  const modsMounted = new Set<Mod>();
+  const mountModLayers = (): void => {
+    for (const mod of mods.getMods()) {
+      if (modsMounted.has(mod)) continue;
+      modsMounted.add(mod);
+      const { ground, over, screen } = mod.layers ?? {};
+      if (ground !== undefined) landscape.floor.addChildAt(ground, 0);
+      if (over !== undefined) modsOver.addChild(over);
+      if (screen !== undefined) modsScreen.addChild(screen);
+    }
+  };
+  mountModLayers();
+  void userModsLoaded.then(mountModLayers);
   // Optional bedroom night-dimming veil (Terrarium screensaver), beneath dip and iris.
   const nightDim = new Sprite(Texture.WHITE);
   nightDim.tint = DIP_COLOUR;
@@ -1270,6 +1284,8 @@ async function start(): Promise<void> {
     world.position.set(Math.floor(x) + MARGIN + shake.x, Math.floor(y) + MARGIN + shake.y);
     atmosphere.lights.scale.set(tile);
     atmosphere.lights.position.copyFrom(world.position);
+    modsOver.scale.set(tile);
+    modsOver.position.copyFrom(world.position);
     marker.update(stepS, entry, shot.view, cells, tile, world.position);
     // In whole device pixels: a browser smooths a picture placed between them.
     const device = window.devicePixelRatio || 1;
@@ -1411,6 +1427,12 @@ async function start(): Promise<void> {
       animals: herd.subjects(),
       season: lastClock?.season,
       seasonProgress: lastClock?.season_progress,
+      // The land drawn (flora, sea level), the view shown and its art pixels to the cell,
+      // the light of the moment (0 night, 1 day)
+      land: landscape.current,
+      view: shot.view,
+      tile: TILES[shot.view],
+      light: atmoState.light,
     };
     mods.dispatchUpdate(dtS, modOptions);
     modMenu.update(dtS, lamp);

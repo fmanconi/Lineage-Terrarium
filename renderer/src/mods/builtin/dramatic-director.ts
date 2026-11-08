@@ -19,13 +19,7 @@ import type { Scene, Subject } from "../../director";
 import type { Mod, ModContext, ModMetadata } from "../types";
 
 export type DramaticEventType =
-  | "mutation"
-  | "disaster"
-  | "birth"
-  | "hunt"
-  | "clash"
-  | "courtship"
-  | "death";
+  "mutation" | "disaster" | "birth" | "hunt" | "clash" | "courtship" | "death";
 
 export interface DramaticEvent {
   id: string;
@@ -97,7 +91,14 @@ export class DramaticDirectorEngine {
   }
 
   /** Register a newly born creature (and flag if it carries rare gene mutations). */
-  recordBirth(id: number, parentId: number | undefined, slots = 0, species = 0, x = 0, y = 0): void {
+  recordBirth(
+    id: number,
+    parentId: number | undefined,
+    slots = 0,
+    species = 0,
+    x = 0,
+    y = 0,
+  ): void {
     if (slots > 0) {
       this.recordEvent({
         id: `mut-${id}-${Math.round(performance.now())}`,
@@ -337,7 +338,10 @@ export class DramaticBadge {
   private paintedText: string | null = null;
   private alpha = 0;
 
-  constructor(private readonly screenWidth: number, private readonly screenHeight: number) {
+  constructor(
+    private readonly screenWidth: number,
+    private readonly screenHeight: number,
+  ) {
     const style = this.element.style;
     style.position = "absolute";
     style.imageRendering = "pixelated";

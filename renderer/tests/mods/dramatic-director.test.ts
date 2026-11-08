@@ -30,14 +30,14 @@ const mockScene = (subjects: Subject[]): Scene => ({
 
 describe("DramaticDirectorMod", () => {
   let frame: HTMLElement;
-  let children: any[];
+  let children: { dataset?: { testid?: string } }[];
   let ctx: ModContext;
 
   beforeEach(() => {
     fakeCanvas();
     children = [];
     frame = {
-      appendChild: (el: any) => children.push(el),
+      appendChild: (el: { dataset?: { testid?: string } }) => children.push(el),
       querySelector: (selector: string) =>
         children.find((c) => selector.includes(c.dataset?.testid ?? "")) ?? null,
     } as unknown as HTMLElement;
