@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import dataclasses
 import logging
 import threading
 import time
@@ -23,13 +22,17 @@ from pathlib import Path
 from typing import Any
 
 from lineage_device.fake import FakeDevice
-from lineage_sim import clock
 from lineage_sim.config import Config, parse_config
 from lineage_sim.state import io
 from lineage_sim.world import World
 
 from lineage_server.island import Island, new_seed
-from lineage_server.main import FAST_LIFE_CONFIG, FAST_LIFE_TIME_SCALE, _years_ahead_offset_ms
+from lineage_server.main import (
+    DEFAULT_MODS,
+    FAST_LIFE_CONFIG,
+    FAST_LIFE_TIME_SCALE,
+    _years_ahead_offset_ms,
+)
 from lineage_server.server import ScaledClock, Server, SystemClock
 from lineage_server.settings import DEFAULT_SETTINGS, load_settings
 from lineage_server.store import Store
@@ -101,6 +104,7 @@ def start_embedded_server(
     time_scale: float,
     years_ahead: int,
     port: int = 8080,
+    mods: Path | None = None,
 ) -> tuple[Server, Callable[[], None], threading.Thread]:
     """Run ``Server`` on a daemon thread and block until its HTTP/WS socket is ready."""
     if port != 0:
@@ -135,7 +139,9 @@ def start_embedded_server(
         if time_scale != 1.0
         else SystemClock(_years_ahead_offset_ms(years_ahead))
     )
-    server = Server(island, FakeDevice(present=True), settings, dist=dist_dir, clock=wall_clock)
+    server = Server(
+        island, FakeDevice(present=True), settings, dist=dist_dir, clock=wall_clock, mods=mods
+    )
 
     ready_event = threading.Event()
     loop_holder: dict[str, Any] = {}
@@ -177,6 +183,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, default=FAST_LIFE_CONFIG)
     parser.add_argument("--time-scale", type=float, default=FAST_LIFE_TIME_SCALE)
     parser.add_argument("--years-ahead", type=int, default=400)
+    parser.add_argument("--mods", type=Path, default=DEFAULT_MODS, help="mods/README.md")
     parser.add_argument("--fullscreen", action="store_true", help="open directly in fullscreen")
     parser.add_argument("--title", default=WINDOW_TITLE, help="the window's title")
     parser.add_argument("--port", type=int, default=8080, help="port to serve on (default: 8080)")
@@ -229,8 +236,11 @@ def _run_desktop(args: argparse.Namespace) -> None:
         time_scale=args.time_scale,
         years_ahead=args.years_ahead,
         port=args.port,
+        mods=args.mods,
     )
-    url = f"http://127.0.0.1:{server.port}/?desktop=1&fast=1"
+    # `fast` quickens the scene's animals to match a quickened island; at x1 they keep pace.
+    fast = "&fast=1" if args.time_scale > 1.0 else ""
+    url = f"http://127.0.0.1:{server.port}/?desktop=1{fast}"
     log.info("Embedded server ready at %s", url)
 
     if args.smoke_test:
@@ -241,9 +251,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
             time.sleep(2.4)
             pos1 = server.island.world.fauna.positions.copy()
             moved = (
-                int((((pos1 - pos0) ** 2).sum(axis=1) > 0).sum())
-                if len(pos0) == len(pos1)
-                else -1
+                int((((pos1 - pos0) ** 2).sum(axis=1) > 0).sum()) if len(pos0) == len(pos1) else -1
             )
             log.info("Smoke test OK on %s | god-power=%s | moved=%s", url, gp1, moved)
         finally:

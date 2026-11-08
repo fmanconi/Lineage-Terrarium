@@ -44,7 +44,7 @@ def write_atomic(path: Path, data: bytes) -> None:
         file.flush()
         os.fsync(file.fileno())
     os.replace(tmp, path)
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         directory = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(directory)

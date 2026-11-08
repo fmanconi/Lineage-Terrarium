@@ -78,9 +78,7 @@ class ScaledClock:
         self.scale = float(scale)
         self._anchor_mono_ns = time.monotonic_ns()
         self._anchor_unix_ms = (
-            int(initial_unix_ms)
-            if initial_unix_ms is not None
-            else time.time_ns() // 1_000_000
+            int(initial_unix_ms) if initial_unix_ms is not None else time.time_ns() // 1_000_000
         )
 
     def anchor_to(self, sim_unix_ms: int) -> None:
@@ -278,13 +276,9 @@ class Server:
             return self._mod_file(path.removeprefix(USER_MODS_PREFIX))
         return self._file(path)
 
-    async def _god_power_http(
-        self, connection: ServerConnection, request: Request
-    ) -> Response:
+    async def _god_power_http(self, connection: ServerConnection, request: Request) -> Response:
         if not self._ready.is_set():
-            return _response(
-                HTTPStatus.SERVICE_UNAVAILABLE, b'{"ready":false}', "application/json"
-            )
+            return _response(HTTPStatus.SERVICE_UNAVAILABLE, b'{"ready":false}', "application/json")
         method = getattr(request, "method", "GET").upper()
         if method == "OPTIONS":
             return _response(HTTPStatus.NO_CONTENT, b"", "text/plain")
@@ -297,9 +291,7 @@ class Server:
                 self.is_desk is is_loopback and is_local_network(connection)
             )
             if not allowed:
-                return _response(
-                    HTTPStatus.FORBIDDEN, b'{"error":"desk_only"}', "application/json"
-                )
+                return _response(HTTPStatus.FORBIDDEN, b'{"error":"desk_only"}', "application/json")
             async with self._lock:
                 now = self.clock.now_ms()
 
@@ -346,23 +338,7 @@ class Server:
 
     def list_mods(self) -> list[dict[str, Any]]:
         """Every mod under ``mods/client`` and ``mods/sim`` with a valid ``mod.json``."""
-        found: list[dict[str, Any]] = []
-        if self.mods is None:
-            return found
-        for kind in MOD_KINDS:
-            folder = self.mods / kind
-            if not folder.is_dir():
-                continue
-            for mod_dir in sorted(folder.iterdir(), key=lambda p: p.name):
-                meta = _read_mod_json(mod_dir)
-                if meta is None:
-                    continue
-                listed = {**meta, "kind": kind}
-                if kind == "client":
-                    entry = meta.get("entry", "index.js")
-                    listed["entry"] = f"{USER_MODS_PREFIX}{mod_dir.name}/{entry}"
-                found.append(listed)
-        return found
+        return [] if self.mods is None else find_mods(self.mods)
 
     def _mod_file(self, rest: str) -> Response:
         """A file of ``mods/client/<id>/``, never one outside it."""
@@ -427,6 +403,26 @@ class Server:
         while True:
             await asyncio.sleep(self.settings.log_every_seconds)
             log.info("status %s", json.dumps(self.status()))
+
+
+def find_mods(root: Path) -> list[dict[str, Any]]:
+    """Every mod under ``root/client`` and ``root/sim`` with a valid ``mod.json``: its
+    metadata, its ``kind`` and, for a client mod, the URL of its entry."""
+    found: list[dict[str, Any]] = []
+    for kind in MOD_KINDS:
+        folder = root / kind
+        if not folder.is_dir():
+            continue
+        for mod_dir in sorted(folder.iterdir(), key=lambda p: p.name):
+            meta = _read_mod_json(mod_dir)
+            if meta is None:
+                continue
+            listed = {**meta, "kind": kind}
+            if kind == "client":
+                entry = meta.get("entry", "index.js")
+                listed["entry"] = f"{USER_MODS_PREFIX}{mod_dir.name}/{entry}"
+            found.append(listed)
+    return found
 
 
 def _read_mod_json(mod_dir: Path) -> dict[str, Any] | None:

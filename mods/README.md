@@ -41,6 +41,8 @@ The server finds this folder at the repository's root; `--mods DIR` points it el
   on/off state).
 - `entry` is the ES module the renderer imports (default `index.js`).
 - `enabled: false` keeps the mod out of the scene entirely (not even in the menu).
+  The launcher (`python -m lineage_server.launcher`) writes it when a mod is switched
+  there.
 
 ## The entry module
 

@@ -120,6 +120,7 @@ import { ChristmasMod } from "./mods/builtin/christmas";
 import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
 import { PackWarfareMod } from "./mods/builtin/pack-warfare";
 import { PurposefulWandererMod } from "./mods/builtin/wanderer";
+import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
 import {
@@ -417,6 +418,8 @@ async function start(): Promise<void> {
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
+  // The user's mods from the server's `mods/` folder, once it answers (mods/README.md).
+  void loadUserMods(mods);
   // The showcase's lines and titles, and its frame counter with `?fps`.
   const overlay = showcasing ? new Overlay(WIDTH, HEIGHT) : null;
   if (overlay !== null) frame.append(overlay.title, overlay.line, overlay.counter);

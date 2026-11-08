@@ -86,7 +86,9 @@ async def _get(url: str, method: str = "GET") -> tuple[int, bytes]:
 
 
 def _serve(
-    tmp_path: Path, test: Callable[[Server, HandClock, FakeDevice], Awaitable[None]]
+    tmp_path: Path,
+    test: Callable[[Server, HandClock, FakeDevice], Awaitable[None]],
+    mods: Path | None = None,
 ) -> Server:
     store = Store(tmp_path / "data")
     if not store.saves():
@@ -106,6 +108,7 @@ def _serve(
         dist=dist,
         clock=clock,
         is_desk=lambda connection: "phone" not in connection.request.path,  # type: ignore[union-attr]
+        mods=mods,
     )
 
     async def run() -> None:
@@ -172,6 +175,55 @@ def test_the_pages_and_the_status_are_served(tmp_path: Path) -> None:
         assert status["sim_cpu_s"] >= 0
 
     _serve(tmp_path, test)
+
+
+def test_user_mods_are_listed_and_served(tmp_path: Path) -> None:
+    mods = tmp_path / "mods"
+    shutil.copytree(REPO / "mods" / "client" / "sample-banner", mods / "client" / "sample-banner")
+    (mods / "client" / "not-a-mod").mkdir()  # no mod.json: never listed
+    (mods / "client" / "secret.txt").write_text("no")
+    (mods / "sim" / "rainmaker").mkdir(parents=True)
+    (mods / "sim" / "rainmaker" / "mod.json").write_text(json.dumps({"id": "rainmaker"}))
+
+    async def test(server: Server, clock: HandClock, device: FakeDevice) -> None:
+        base = f"http://127.0.0.1:{server.port}"
+        code, body = await _get(base + "/api/mods")
+        assert code == 200
+        listed = {mod["id"]: mod for mod in json.loads(body)}
+        assert sorted(listed) == ["rainmaker", "sample-banner"]
+        banner = listed["sample-banner"]
+        assert banner["kind"] == "client"
+        assert banner["name"] == "Sample Banner"
+        assert banner["defaultEnabled"] is False
+        assert banner["entry"] == "/user-mods/sample-banner/index.js"
+        assert listed["rainmaker"]["kind"] == "sim"
+        assert "entry" not in listed["rainmaker"]
+
+        def fetch() -> tuple[int, str, bytes]:
+            with urllib.request.urlopen(base + banner["entry"], timeout=WAIT_S) as response:
+                return response.status, response.headers["Content-Type"], response.read()
+
+        code, kind, script = await asyncio.to_thread(fetch)
+        assert (code, kind) == (200, "text/javascript")
+        assert b"export default class SampleBannerMod" in script
+        assert (await _get(base + "/user-mods/sample-banner/mod.json"))[0] == 200
+        for path in (
+            "/user-mods/sample-banner/../../secret.txt",
+            "/user-mods/sample-banner/../secret.txt",
+            "/user-mods/sample-banner/%2e%2e/%2e%2e/secret.txt",
+            "/user-mods/../secret.txt",
+            "/user-mods/..%2fsecret.txt",
+            "/user-mods/Sample-Banner/index.js",
+            "/user-mods/sample%20banner/index.js",
+            "/user-mods/.hidden/index.js",
+            "/user-mods/sample-banner/",
+            "/user-mods/sample-banner",
+            "/user-mods/sample-banner/nothing.js",
+            "/user-mods/rainmaker/mod.json",
+        ):
+            assert (await _get(base + path))[0] == 404, path
+
+    _serve(tmp_path, test, mods=mods)
 
 
 def test_stopping_saves_and_a_restart_goes_on_from_there(tmp_path: Path) -> None:

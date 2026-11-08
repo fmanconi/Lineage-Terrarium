@@ -1,0 +1,528 @@
+<!doctype html>
+<!--
+  Lineage's launcher (server/lineage_server/launcher.py): worlds, pace, mods, Launch.
+  In a pywebview window it calls Python through window.pywebview.api; opened in a browser
+  (no pywebview) it calls the same methods over HTTP with the token in its URL.
+  Self-contained: no fonts, images or scripts from elsewhere, so it opens offline.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lineage — Launcher</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --night: #10081c;
+        --dusk: #241338;
+        --bark: #3e2418;
+        --wood: #6b4226;
+        --parchment: #faf3e1;
+        --sand: #e8d5a9;
+        --leaf: #5c9e4a;
+        --leaf-dark: #34683a;
+        --sea: #3d7bb0;
+        --ember: #e8833a;
+        --gold: #f4c95d;
+        --muted: #a99bb8;
+        --px: 4px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--night);
+        color: var(--parchment);
+        font: 15px/1.35 "Courier New", ui-monospace, monospace;
+        -webkit-font-smoothing: none;
+        image-rendering: pixelated;
+        user-select: none;
+      }
+      body {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 14px;
+        padding: 16px 20px;
+        background:
+          radial-gradient(circle at 1px 1px, #ffffff14 1px, transparent 1.5px) 0 0 / 24px 24px,
+          linear-gradient(var(--night), var(--dusk));
+      }
+      /* Pixel frames: square corners notched by stepped shadows. */
+      .panel {
+        background: var(--bark);
+        box-shadow:
+          0 calc(-1 * var(--px)) 0 0 var(--wood),
+          0 var(--px) 0 0 var(--wood),
+          calc(-1 * var(--px)) 0 0 0 var(--wood),
+          var(--px) 0 0 0 var(--wood),
+          0 0 0 calc(2 * var(--px)) var(--night);
+        padding: 12px 14px;
+        margin: var(--px);
+        min-height: 0;
+      }
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        letter-spacing: 6px;
+        color: var(--gold);
+        text-shadow:
+          var(--px) var(--px) 0 var(--bark),
+          calc(2 * var(--px)) calc(2 * var(--px)) 0 #00000080;
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--sand);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      header p {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      canvas#island {
+        width: 128px;
+        height: 64px;
+        image-rendering: pixelated;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 14px;
+        min-height: 0;
+      }
+      .column {
+        display: grid;
+        gap: 14px;
+        grid-template-rows: auto 1fr;
+        min-height: 0;
+      }
+      .list {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        overflow-y: auto;
+        max-height: 100%;
+        padding: 2px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 10px;
+        padding: 8px 10px;
+        background: #2b1810;
+        border: var(--px) solid #2b1810;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+        font: inherit;
+        width: 100%;
+      }
+      .row:hover {
+        border-color: var(--wood);
+      }
+      .row[aria-pressed="true"] {
+        border-color: var(--gold);
+        background: #4a2c1c;
+      }
+      .row .name {
+        font-weight: bold;
+        color: var(--parchment);
+      }
+      .row .meta {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .row .badge {
+        color: var(--leaf);
+        font-size: 13px;
+      }
+      .modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .mode {
+        padding: 10px 8px;
+        border: var(--px) solid #2b1810;
+        background: #2b1810;
+        color: var(--parchment);
+        font: inherit;
+        cursor: pointer;
+      }
+      .mode small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 4px;
+      }
+      .mode[aria-pressed="true"] {
+        border-color: var(--gold);
+        background: #4a2c1c;
+      }
+      .mod .desc {
+        grid-column: 1 / -1;
+        color: var(--sand);
+        font-size: 12px;
+      }
+      .toggle {
+        width: 44px;
+        height: 20px;
+        background: #2b1810;
+        border: var(--px) solid var(--wood);
+        position: relative;
+      }
+      .toggle::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 16px;
+        height: 12px;
+        background: var(--muted);
+      }
+      .mod[aria-pressed="true"] .toggle {
+        border-color: var(--leaf-dark);
+      }
+      .mod[aria-pressed="true"] .toggle::after {
+        left: 20px;
+        background: var(--leaf);
+      }
+      .mod[aria-disabled="true"] {
+        cursor: default;
+        opacity: 0.6;
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      label.check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      label.check input {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+        background: #2b1810;
+        border: var(--px) solid var(--wood);
+        cursor: pointer;
+      }
+      label.check input:checked {
+        background: var(--leaf);
+        border-color: var(--leaf-dark);
+      }
+      #status {
+        flex: 1;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      #status.error {
+        color: var(--ember);
+      }
+      #launch {
+        font: bold 24px "Courier New", monospace;
+        letter-spacing: 6px;
+        padding: 14px 40px;
+        color: var(--night);
+        background: var(--gold);
+        border: none;
+        cursor: pointer;
+        box-shadow:
+          0 calc(-1 * var(--px)) 0 0 #b98a2a inset,
+          0 var(--px) 0 0 #fff3c4 inset,
+          0 0 0 var(--px) var(--bark),
+          var(--px) calc(2 * var(--px)) 0 var(--px) #00000080;
+      }
+      #launch:hover:not(:disabled) {
+        background: #ffd978;
+      }
+      #launch:active:not(:disabled) {
+        transform: translate(var(--px), var(--px));
+      }
+      #launch:disabled {
+        background: var(--muted);
+        cursor: default;
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .hint {
+        margin: -4px 0 0;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <canvas id="island" width="32" height="16" aria-hidden="true"></canvas>
+      <div>
+        <h1>LINEAGE</h1>
+        <p>An island that evolves on its own. Pick a world, a pace, and go.</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel column" aria-labelledby="worlds-title">
+        <h2 id="worlds-title">Worlds</h2>
+        <div class="list" id="worlds"><p class="empty">Looking for worlds…</p></div>
+      </section>
+      <div class="column">
+        <section class="panel" aria-labelledby="mode-title">
+          <h2 id="mode-title">Pace</h2>
+          <div class="modes" id="modes"></div>
+        </section>
+        <section class="panel column" style="grid-template-rows: auto auto 1fr" aria-labelledby="mods-title">
+          <h2 id="mods-title">Mods</h2>
+          <p class="empty hint">On here: loaded into the scene. In the game, <b>M</b> switches it.</p>
+          <div class="list" id="mods"><p class="empty">Looking for mods…</p></div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <label class="check"><input type="checkbox" id="fullscreen" /> Full screen</label>
+      <span id="status"></span>
+      <button id="launch" disabled>LAUNCH</button>
+    </footer>
+
+    <script>
+      "use strict";
+      const MODE_NOTES = {
+        fast: "1 real hour ≈ 3.75 island days",
+        realtime: "The island lives at your pace",
+      };
+      const STORE_KEY = "lineage_launcher_v1";
+      const saved = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+        } catch {
+          return {};
+        }
+      })();
+      const state = { world: saved.world ?? null, mode: saved.mode ?? "fast" };
+      const $ = (id) => document.getElementById(id);
+      $("fullscreen").checked = saved.fullscreen === true;
+
+      // The bridge: pywebview's API in its window, the launcher's HTTP API in a browser.
+      const TOKEN = new URLSearchParams(location.search).get("token");
+      const apiReady = TOKEN
+        ? Promise.resolve(null)
+        : new Promise((resolve) => {
+            if (window.pywebview?.api) resolve(window.pywebview.api);
+            else window.addEventListener("pywebviewready", () => resolve(window.pywebview.api));
+          });
+      async function call(name, ...args) {
+        const api = await apiReady;
+        if (api) return api[name](...args);
+        const response = await fetch(`/api/${name}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Launcher-Token": TOKEN },
+          body: JSON.stringify({ args }),
+        });
+        if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+        return response.json();
+      }
+
+      function remember() {
+        try {
+          localStorage.setItem(
+            STORE_KEY,
+            JSON.stringify({ ...state, fullscreen: $("fullscreen").checked }),
+          );
+        } catch {
+          // A webview without storage: the choices are not kept.
+        }
+      }
+      function status(text, error = false) {
+        $("status").textContent = text;
+        $("status").classList.toggle("error", error);
+      }
+      function el(tag, props = {}, ...children) {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+          if (key === "class") node.className = value;
+          else if (key.startsWith("aria-")) node.setAttribute(key, value);
+          else node[key] = value;
+        }
+        node.append(...children);
+        return node;
+      }
+      function when(iso) {
+        if (!iso) return "never saved";
+        const date = new Date(iso);
+        return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      }
+      function islandDate(iso) {
+        if (!iso) return "a new island";
+        const date = new Date(iso);
+        return `island date ${date.toISOString().slice(0, 10)}`;
+      }
+      function updateLaunch() {
+        $("launch").disabled = state.world === null;
+      }
+
+      function renderWorlds(worlds) {
+        const list = $("worlds");
+        list.replaceChildren();
+        if (worlds.length === 0) {
+          list.append(el("p", { class: "empty", textContent: "No worlds in data/ yet." }));
+          state.world = null;
+        } else if (!worlds.some((w) => w.name === state.world)) {
+          state.world = worlds[0].name;
+        }
+        for (const world of worlds) {
+          const creatures =
+            world.creatures === null ? "?" : `${world.creatures.toLocaleString()} 🐾`;
+          const ended = world.ended_worlds ? ` · ${world.ended_worlds} ended` : "";
+          const row = el(
+            "button",
+            { class: "row", type: "button", "aria-pressed": String(world.name === state.world) },
+            el("span", { class: "name", textContent: world.name }),
+            el("span", { class: "badge", textContent: creatures }),
+            el("span", {
+              class: "meta",
+              textContent: `${islandDate(world.island_time)} · saved ${when(world.saved_at)}${ended}`,
+            }),
+          );
+          row.addEventListener("click", () => {
+            state.world = world.name;
+            remember();
+            for (const other of list.children) other.setAttribute("aria-pressed", "false");
+            row.setAttribute("aria-pressed", "true");
+            updateLaunch();
+          });
+          list.append(row);
+        }
+        updateLaunch();
+      }
+
+      function renderModes(modes) {
+        const box = $("modes");
+        box.replaceChildren();
+        if (!modes.some((m) => m.id === state.mode)) state.mode = modes[0]?.id ?? "fast";
+        for (const mode of modes) {
+          const button = el(
+            "button",
+            { class: "mode", type: "button", "aria-pressed": String(mode.id === state.mode) },
+            mode.label,
+            el("small", { textContent: MODE_NOTES[mode.id] ?? `x${mode.time_scale}` }),
+          );
+          button.addEventListener("click", () => {
+            state.mode = mode.id;
+            remember();
+            for (const other of box.children) other.setAttribute("aria-pressed", "false");
+            button.setAttribute("aria-pressed", "true");
+          });
+          box.append(button);
+        }
+      }
+
+      function renderMods(mods) {
+        const list = $("mods");
+        list.replaceChildren();
+        if (mods.length === 0) {
+          list.append(el("p", { class: "empty", textContent: "No user mods in mods/." }));
+        }
+        for (const mod of mods) {
+          const client = mod.kind === "client";
+          const row = el(
+            "button",
+            {
+              class: "row mod",
+              type: "button",
+              "aria-pressed": String(client && mod.enabled),
+              "aria-disabled": String(!client),
+              title: client ? "Load this mod into the scene" : "Simulation mods are listed only",
+            },
+            el("span", { class: "name", textContent: `${mod.name ?? mod.id} ${mod.version ?? ""}` }),
+            client ? el("span", { class: "toggle" }) : el("span", { class: "badge", textContent: "sim" }),
+            el("span", { class: "desc", textContent: mod.description ?? "" }),
+          );
+          if (client) {
+            row.addEventListener("click", async () => {
+              const next = row.getAttribute("aria-pressed") !== "true";
+              try {
+                const result = await call("set_mod_enabled", mod.id, next);
+                if (!result.ok) throw new Error(result.error);
+                row.setAttribute("aria-pressed", String(result.enabled));
+                status(`${mod.name ?? mod.id} ${result.enabled ? "on" : "off"}.`);
+              } catch (error) {
+                status(String(error.message ?? error), true);
+              }
+            });
+          }
+          list.append(row);
+        }
+      }
+
+      $("fullscreen").addEventListener("change", remember);
+      $("launch").addEventListener("click", async () => {
+        if (state.world === null) return;
+        $("launch").disabled = true;
+        status(`Waking ${state.world}…`);
+        try {
+          const result = await call("launch", state.world, state.mode, $("fullscreen").checked);
+          if (!result.ok) throw new Error(result.error);
+          remember();
+          status(`${state.world} is waking up. This window closes on its own.`);
+        } catch (error) {
+          status(String(error.message ?? error), true);
+          updateLaunch();
+        }
+      });
+
+      // A little island in the header, a new one each time: noise, a falloff, four colours.
+      (function drawIsland() {
+        const canvas = $("island");
+        const ctx = canvas.getContext("2d");
+        const { width: w, height: h } = canvas;
+        const seed = Math.random() * 1000;
+        const noise = (x, y) =>
+          Math.sin(x * 0.55 + seed) * Math.cos(y * 0.8 - seed * 0.7) * 0.5 +
+          Math.sin((x + y) * 0.31 + seed * 1.3) * 0.5;
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const dx = (x - w / 2) / (w / 2);
+            const dy = (y - h / 2) / (h / 2);
+            const height = 1 - Math.hypot(dx, dy) * 1.15 + noise(x, y) * 0.28;
+            ctx.fillStyle =
+              height < 0.05
+                ? (x + y) % 7 === 0
+                  ? "#5a94c4"
+                  : "#3d7bb0"
+                : height < 0.14
+                  ? "#e8d5a9"
+                  : height < 0.42
+                    ? "#5c9e4a"
+                    : "#34683a";
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      })();
+
+      Promise.all([call("list_worlds"), call("modes"), call("list_mods")])
+        .then(([worlds, modes, mods]) => {
+          renderWorlds(worlds);
+          renderModes(modes);
+          renderMods(mods);
+        })
+        .catch((error) => status(`The launcher could not start: ${error.message ?? error}`, true));
+    </script>
+  </body>
+</html>

@@ -139,9 +139,7 @@ def main(argv: list[str] | None = None) -> None:
         if time_scale != 1.0
         else SystemClock(_years_ahead_offset_ms(args.years_ahead))
     )
-    server = Server(
-        island, device, settings, dist=args.dist, clock=wall_clock, mods=args.mods
-    )
+    server = Server(island, device, settings, dist=args.dist, clock=wall_clock, mods=args.mods)
 
     async def run() -> None:
         stop = asyncio.Event()

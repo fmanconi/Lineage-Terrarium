@@ -137,7 +137,9 @@ lineage/
 │                             #   saves), server.py (WebSocket /stream, pages, /status), feed.py
 │                             #   (which messages a step makes), store.py (saves on disk),
 │                             #   settings.py (S1); later api.py, notify.py, journal.py;
-│                             #   protocol/ (schema.json: the wire format; encode.py)
+│                             #   protocol/ (schema.json: the wire format; encode.py);
+│                             #   desktop.py (the desktop app), launcher.py and
+│                             #   assets/launcher.html (its launcher: world, pace, mods)
 ├── device/                   # Python package `lineage_device` — the ONLY code touching GPIO
 │   └── lineage_device/       # interface.py (what the server gets, S1), fake.py (S1's minimal
 │                             #   fake; S2 completes it), presence.py, button.py, led.py,
@@ -252,6 +254,10 @@ Do not create directories outside this layout without updating this file.
     `sim/config/terrarium.toml` (the real solar cycle) and Chromium in kiosk mode
     (`docs/terrarium-kiosk.md`, ADR 0025); `Lineage-Terrarium.cmd` opens the desktop app on
     Windows
+  - `uv run python -m lineage_server.launcher [--browser]` — the desktop app's launcher: a
+    world under `data/`, the pace (fast-life x90 or real time x1), the user mods of `mods/`
+    on or off, then Launch; a pywebview window, or the browser without pywebview
+    (`Lineage-Launcher.cmd` on Windows, `deploy/terrarium-launcher.sh` on Linux)
   - `deploy/s1-board.sh setup|start|status|stop lineage@<board>` — the server and the kiosk
     on the board (procedure in `deploy/README.md`), then `uv run python -m
     tools.server_watch http://<board>:8080 --minutes 180 --out runs/s1-board/status.jsonl`
