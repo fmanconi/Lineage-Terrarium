@@ -280,7 +280,21 @@ def start_embedded_server(
     return server, shutdown, thread
 
 
+APP_USER_MODEL_ID = "Federico.Lineage.Terrarium.1"
+
+
+def _set_app_user_model_id() -> None:
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+        except Exception:
+            pass
+
+
 def main(argv: list[str] | None = None) -> None:
+    _set_app_user_model_id()
     parser = argparse.ArgumentParser(description="Launch Lineage as a standalone desktop game.")
     parser.add_argument("--data", type=Path, default=DEFAULT_GAME_DATA)
     parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
