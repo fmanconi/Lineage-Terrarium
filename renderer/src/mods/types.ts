@@ -5,6 +5,7 @@
  * registered, initialised with the screen it may draw on, then switched on and off at will
  * from the mod menu (`M`). Its on/off state is the registry's, persisted locally.
  */
+import type { Container } from "pixi.js";
 import type { StorageLike } from "../settings";
 
 export interface ModMetadata {
@@ -28,8 +29,23 @@ export interface ModContext {
   storage: StorageLike;
 }
 
+/**
+ * What a mod draws on the scene: `main.ts` mounts each container once, after `init`. The
+ * mod keeps them hidden while it is off.
+ */
+export interface ModLayers {
+  /** In cells, on the ground: under the plants and the animals of the view shown. */
+  ground?: Container;
+  /** In cells, over the whole scene and its light. */
+  over?: Container;
+  /** In art pixels of the screen (`width` × `height`), over the scene. */
+  screen?: Container;
+}
+
 export interface Mod {
   readonly meta: ModMetadata;
+  /** The mod's drawing on the scene, if it has any. */
+  readonly layers?: ModLayers;
   /** Called once, before the first `enable` or `disable`. */
   init(ctx: ModContext): void;
   enable(): void;

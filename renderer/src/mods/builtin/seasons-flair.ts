@@ -8,9 +8,12 @@
  *   - Winter: Soft frost motes and crisp cold atmospheric glints.
  *
  * Fully reactive to wind speed and direction (`atmosphere.wind`).
+ * Drawn over the screen (`layers.screen`, 512×300 art pixels) in whole art pixels, dimmed
+ * by the light of the moment (`options.light`).
  * Operates purely on client visual layers without affecting sim logic.
  */
-import type { Mod, ModContext, ModMetadata } from "../types";
+import { Graphics } from "pixi.js";
+import type { Mod, ModContext, ModLayers, ModMetadata } from "../types";
 
 export type SeasonName = "spring" | "summer" | "autumn" | "winter";
 
@@ -136,14 +139,20 @@ export class SeasonalFlairSystem {
     const season = this.getActiveSeason();
     const { colour, kind } = this.pickColour(season);
 
-    // Spawn along top or upwind edge
-    const x = Math.random() * (width + 60) - 30;
-    const y = -10;
+    // Spawn along top or, in a strong wind, the upwind edge's upper part
+    const fromSide = Math.abs(windX) > SIDE_WIND && Math.random() < SIDE_SHARE;
+    const x = fromSide
+      ? windX > 0
+        ? -10
+        : width + 10
+      : Math.random() * (width + 60) - 30;
+    const y = fromSide ? Math.random() * height * 0.6 : -10;
     const lifeS = 4 + Math.random() * 5;
 
     // Kinematics based on particle kind
     let vx = (windX * 0.7 + (Math.random() - 0.5) * 0.5) * (kind === "leaf" ? 35 : 20);
-    let vy = (kind === "pollen" ? 8 : kind === "leaf" ? 30 : 20) + Math.random() * 15;
+    let vy =
+      (kind === "pollen" ? 8 : kind === "leaf" ? 30 : 20) + Math.random() * 15 + windY * 10;
     if (kind === "mote") {
       vx *= 0.3;
       vy *= 0.4;

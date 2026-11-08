@@ -5,6 +5,8 @@ import {
   isBiophonyActive,
   setBiophonyActive,
   BIOPHONY_STORAGE_KEY,
+  THUNDER_COOLDOWN_S,
+  biophonyEngine,
   type AudioContextLike,
 } from "../../src/mods/builtin/biophony";
 import { memoryStorage } from "../../src/mods/registry";
@@ -104,7 +106,7 @@ describe("Biophony & Soundscape Mod", () => {
     const mod = new BiophonyMod();
     expect(mod.meta.id).toBe("biophony-soundscape");
     expect(mod.meta.name).toBe("Biophony & Soundscape");
-    expect(mod.meta.defaultEnabled).toBe(true);
+    expect(mod.meta.defaultEnabled).toBe(false);
   });
 
   it("enables and disables cleanly", () => {
@@ -152,5 +154,36 @@ describe("Biophony & Soundscape Mod", () => {
 
     engine.triggerThunder();
     expect(mockAudio.logs).toContain("osc.frequency.exponentialRampToValueAtTime 30");
+  });
+
+  it("rumbles at most once every THUNDER_COOLDOWN_S through a storm", () => {
+    const mockAudio = createMockAudioContext();
+    const engine = new BiophonyEngine(mockAudio);
+    engine.init();
+    setBiophonyActive(true);
+    const rumbles = (): number =>
+      mockAudio.logs.filter((line) => line === "osc.frequency.exponentialRampToValueAtTime 30")
+        .length;
+
+    let heard = 0;
+    // 20 s of storm at 30 fps, asking for thunder every frame.
+    for (let frame = 0; frame < 600; frame++) {
+      engine.update(1 / 30, 1, 1, false, 0);
+      if (engine.requestThunder()) heard++;
+    }
+    expect(heard).toBe(Math.ceil(20 / THUNDER_COOLDOWN_S));
+    expect(rumbles()).toBe(heard);
+    expect(engine.thunderCooldownS).toBeGreaterThan(0);
+    expect(engine.thunderCooldownS).toBeLessThanOrEqual(THUNDER_COOLDOWN_S);
+  });
+
+  it("the mod turns a storm's every frame into one rumble per cooldown", () => {
+    const mod = new BiophonyMod();
+    mod.enable();
+    biophonyEngine.thunderCooldownS = 0;
+    for (let frame = 0; frame < 30; frame++) mod.update(1 / 30, { thunder: true });
+    // One rumble at the first frame; the cooldown then runs for a second only.
+    expect(biophonyEngine.thunderCooldownS).toBeCloseTo(THUNDER_COOLDOWN_S - 29 / 30, 5);
+    mod.disable();
   });
 });

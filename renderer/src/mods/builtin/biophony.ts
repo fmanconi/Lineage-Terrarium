@@ -16,6 +16,8 @@ import type { StorageLike } from "../../settings";
 import type { Mod, ModContext, ModMetadata } from "../types";
 
 export const BIOPHONY_STORAGE_KEY = "lineage_biophony_settings_v1";
+/** Seconds between two thunder rumbles at least: a storm lasts many frames, one rumble each. */
+export const THUNDER_COOLDOWN_S = 8;
 
 export interface BiophonySettings {
   volume: number; // 0.0 to 1.0
@@ -101,6 +103,8 @@ export class BiophonyEngine {
   private settings: BiophonySettings = { volume: 0.45, muted: false };
   private storage: StorageLike | null = null;
   private chirpCooldownS = 0;
+  /** Seconds until the next thunder may rumble (0: it may now). */
+  thunderCooldownS = 0;
   private isNight = false;
   private animalCount = 0;
 
@@ -291,6 +295,17 @@ export class BiophonyEngine {
     }
   }
 
+  /**
+   * Rumble for a storm if the last rumble is at least `THUNDER_COOLDOWN_S` old; returns
+   * whether it rumbled.
+   */
+  requestThunder(): boolean {
+    if (this.thunderCooldownS > 0) return false;
+    this.thunderCooldownS = THUNDER_COOLDOWN_S;
+    this.triggerThunder();
+    return true;
+  }
+
   /** Trigger thunder sub-bass rumble on storm lightning */
   triggerThunder(): void {
     if (!this.ctx || !this.masterGain || this.settings.muted) return;
@@ -317,6 +332,7 @@ export class BiophonyEngine {
   update(dtS: number, rain = 0, windSpeed = 1.0, isNight = false, animalCount = 0): void {
     if (!biophonyActive || dtS <= 0) return;
 
+    this.thunderCooldownS = Math.max(0, this.thunderCooldownS - dtS);
     this.isNight = isNight;
     this.animalCount = animalCount;
 
@@ -354,7 +370,7 @@ export class BiophonyMod implements Mod {
     version: "1.0.0",
     description:
       "Procedural, zero-dependency environmental audio: wind, ocean surf, rain, thunder, and emergent creature bio-chirps.",
-    defaultEnabled: true,
+    defaultEnabled: false,
   };
 
   init(ctx: ModContext): void {
@@ -386,7 +402,7 @@ export class BiophonyMod implements Mod {
     biophonyEngine.update(dtS, rain, windSpeed, isNight, animals);
 
     if (options.thunder === true) {
-      biophonyEngine.triggerThunder();
+      biophonyEngine.requestThunder();
     }
   }
 }

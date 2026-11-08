@@ -19,7 +19,7 @@ describe("Eco-Heatmap Overlays Mod", () => {
     const mod = new EcoHeatmapMod();
     expect(mod.meta.id).toBe("eco-heatmap");
     expect(mod.meta.name).toBe("Eco-Heatmap Overlays");
-    expect(mod.meta.defaultEnabled).toBe(true);
+    expect(mod.meta.defaultEnabled).toBe(false);
   });
 
   it("enables, disables and handles state cleanly", () => {
