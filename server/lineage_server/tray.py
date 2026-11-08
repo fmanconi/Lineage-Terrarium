@@ -102,9 +102,20 @@ def _icon_rows() -> list[str]:
 def create_tray_icon_image(size: int = ICON_SIZE) -> Image.Image:
     """The tray's icon: a sprout in a corked glass terrarium, as hard-edged pixel art.
 
-    Drawn at 32×32 and scaled by whole pixels (nearest neighbour) when ``size`` is a
-    multiple, so its edges stay crisp at any size the tray asks for.
+    Prefers the high-resolution asset at ``deploy/lineage.png`` if available, resized
+    cleanly with Lanczos. Otherwise builds from the 32×32 pixel map.
     """
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    custom_png = repo_root / "deploy" / "lineage.png"
+    if custom_png.is_file():
+        try:
+            loaded = Image.open(custom_png).convert("RGBA")
+            return loaded.resize((size, size), Image.Resampling.LANCZOS)
+        except Exception:
+            pass
+
     rows = _icon_rows()
     if len(rows) != ICON_SIZE or any(len(row) != ICON_SIZE for row in rows):
         raise ValueError("the tray icon's pixel map must be 32×32")
