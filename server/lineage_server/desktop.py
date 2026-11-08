@@ -415,12 +415,49 @@ def _run_desktop(args: argparse.Namespace) -> None:
         js_api=api,
     )
     api._window = window
-    window.events.closed += lambda: shutdown()
+
+    from lineage_server.tray import TrayController, ask_close_action
+
+    quitting = threading.Event()
+    tray: TrayController | None = None
+
+    def on_tray_show() -> None:
+        window.show()
+        window.restore()
+
+    def on_tray_exit() -> None:
+        quitting.set()
+        shutdown()
+        window.destroy()
+
+    tray = TrayController(on_show=on_tray_show, on_exit=on_tray_exit, title=args.title)
+
+    def on_closing() -> bool:
+        if quitting.is_set():
+            return True
+        action = ask_close_action()
+        if action == "background":
+            window.hide()
+            assert tray is not None
+            tray.start()
+            return False
+        if action == "exit":
+            quitting.set()
+            if tray is not None:
+                tray.stop()
+            shutdown()
+            return True
+        return False
+
+    window.events.closing += on_closing
+    window.events.closed += lambda: (tray.stop() if tray else None, shutdown())
     try:
         log.info("Starting webview event loop")
         webview.start(debug=False)
         log.info("webview event loop terminated cleanly")
     finally:
+        if tray is not None:
+            tray.stop()
         shutdown()
 
 
