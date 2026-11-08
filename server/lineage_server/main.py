@@ -39,6 +39,7 @@ from lineage_server.store import Store
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "default.toml"
 FAST_LIFE_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "fast_life.toml"
 FAST_LIFE_TIME_SCALE = 90.0
+DEFAULT_MODS = Path(__file__).resolve().parents[2] / "mods"
 
 
 def _years_ahead_offset_ms(years_ahead: int) -> int:
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Lineage island in real time.")
     parser.add_argument("--data", type=Path, required=True, help="saves and archives live here")
     parser.add_argument("--dist", type=Path, help="the renderer's build to serve (dist-kiosk)")
+    parser.add_argument("--mods", type=Path, default=DEFAULT_MODS, help="mods/README.md")
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS)
     parser.add_argument("--config", type=Path, default=None, help="the sim's config")
     parser.add_argument("--seed", type=int, help="the first world's seed (default: random)")
@@ -137,7 +139,9 @@ def main(argv: list[str] | None = None) -> None:
         if time_scale != 1.0
         else SystemClock(_years_ahead_offset_ms(args.years_ahead))
     )
-    server = Server(island, device, settings, dist=args.dist, clock=wall_clock)
+    server = Server(
+        island, device, settings, dist=args.dist, clock=wall_clock, mods=args.mods
+    )
 
     async def run() -> None:
         stop = asyncio.Event()

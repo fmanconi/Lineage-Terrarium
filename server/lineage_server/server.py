@@ -1,7 +1,9 @@
 """The server's event loop (S1, ADR 0023): the island in real time, its stream, its pages.
 
 One port serves the kiosk's pages (the renderer's build, ``--dist``), the state stream as
-a WebSocket at ``/stream``, and the server's own numbers at ``/status``.
+a WebSocket at ``/stream``, and the server's own numbers at ``/status``. The user's mods
+(``mods/``, ``mods/README.md``) are listed at ``/api/mods`` and the client mods' files
+served under ``/user-mods/<id>/``.
 
 Every call on the island runs in one sim thread, and its messages are handed to the
 clients under one lock, so every client sees the messages in the order they were made: a
@@ -22,6 +24,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -45,6 +48,10 @@ log = logging.getLogger(__name__)
 STREAM_PATH = "/stream"
 STATUS_PATH = "/status"
 GOD_POWER_PATH = "/god-power"
+MODS_PATH = "/api/mods"
+USER_MODS_PREFIX = "/user-mods/"
+MOD_KINDS = ("client", "sim")
+MOD_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _T = TypeVar("_T")
 
 
@@ -128,11 +135,13 @@ class Server:
         dist: Path | None = None,
         clock: WallClock | None = None,
         is_desk: Callable[[ServerConnection], bool] = is_loopback,
+        mods: Path | None = None,
     ) -> None:
         self.island = island
         self.device = device
         self.settings = settings
         self.dist = dist.resolve() if dist is not None else None
+        self.mods = mods.resolve() if mods is not None else None
         self.clock = clock if clock is not None else SystemClock()
         self.is_desk = is_desk
         self.port: int | None = None
@@ -262,6 +271,11 @@ class Server:
             return _response(HTTPStatus.OK, body, "application/json")
         if path == GOD_POWER_PATH:
             return await self._god_power_http(connection, request)
+        if path == MODS_PATH:
+            body = json.dumps(self.list_mods()).encode()
+            return _response(HTTPStatus.OK, body, "application/json")
+        if path.startswith(USER_MODS_PREFIX):
+            return self._mod_file(path.removeprefix(USER_MODS_PREFIX))
         return self._file(path)
 
     async def _god_power_http(
@@ -328,6 +342,47 @@ class Server:
         kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         return _response(HTTPStatus.OK, target.read_bytes(), kind)
 
+    # --- User mods ------------------------------------------------------------------------
+
+    def list_mods(self) -> list[dict[str, Any]]:
+        """Every mod under ``mods/client`` and ``mods/sim`` with a valid ``mod.json``."""
+        found: list[dict[str, Any]] = []
+        if self.mods is None:
+            return found
+        for kind in MOD_KINDS:
+            folder = self.mods / kind
+            if not folder.is_dir():
+                continue
+            for mod_dir in sorted(folder.iterdir(), key=lambda p: p.name):
+                meta = _read_mod_json(mod_dir)
+                if meta is None:
+                    continue
+                listed = {**meta, "kind": kind}
+                if kind == "client":
+                    entry = meta.get("entry", "index.js")
+                    listed["entry"] = f"{USER_MODS_PREFIX}{mod_dir.name}/{entry}"
+                found.append(listed)
+        return found
+
+    def _mod_file(self, rest: str) -> Response:
+        """A file of ``mods/client/<id>/``, never one outside it."""
+        missing = _response(HTTPStatus.NOT_FOUND, b"not found\n", "text/plain")
+        if self.mods is None:
+            return missing
+        mod_id, _, relative = rest.partition("/")
+        if not MOD_ID.fullmatch(mod_id) or not relative:
+            return missing
+        root = (self.mods / "client" / mod_id).resolve()
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            return missing
+        if target.suffix in (".js", ".mjs"):
+            # Module scripts need a JavaScript type, which the system's tables may not give.
+            kind = "text/javascript"
+        else:
+            kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        return _response(HTTPStatus.OK, target.read_bytes(), kind)
+
     # --- Running --------------------------------------------------------------------------
 
     async def run(self, stop: asyncio.Event, ready: Callable[[], None] = lambda: None) -> None:
@@ -372,6 +427,26 @@ class Server:
         while True:
             await asyncio.sleep(self.settings.log_every_seconds)
             log.info("status %s", json.dumps(self.status()))
+
+
+def _read_mod_json(mod_dir: Path) -> dict[str, Any] | None:
+    """A mod's ``mod.json`` if its folder is a mod: a valid id equal to the folder's name."""
+    if not mod_dir.is_dir() or not MOD_ID.fullmatch(mod_dir.name):
+        return None
+    try:
+        meta: object = json.loads((mod_dir / "mod.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        log.warning("mod %s has no readable mod.json", mod_dir.name)
+        return None
+    if not isinstance(meta, dict) or meta.get("id") != mod_dir.name:  # type: ignore[union-attr]
+        log.warning("mod %s: mod.json's id is not the folder's name", mod_dir.name)
+        return None
+    checked: dict[str, Any] = dict(meta)  # type: ignore[arg-type]
+    entry = checked.get("entry", "index.js")
+    if not isinstance(entry, str) or entry.startswith("/") or ".." in entry.split("/"):
+        log.warning("mod %s: bad entry %r", mod_dir.name, entry)
+        return None
+    return checked
 
 
 def _response(status: HTTPStatus, body: bytes, kind: str) -> Response:
