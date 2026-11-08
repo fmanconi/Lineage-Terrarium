@@ -272,20 +272,20 @@ describe("Bottom-right KeyBar", () => {
   it("paints crisp keycaps and adapts hints to open guide tabs", () => {
     const closed = hintsForState(false, "species", "ready", true, true, true);
     expect(closed.map((h) => h.id)).toEqual([
-      "view",
       "guide",
-      "night",
+      "view",
       "miracle",
+      "night",
+      "mods",
       "fullscreen",
       "pip",
-      "mods",
     ]);
     expect(closed.find((h) => h.id === "night")?.dot).toBe("moon-on");
     expect(closed.find((h) => h.id === "fullscreen")?.dot).toBe("full-on");
     expect(closed.find((h) => h.id === "pip")?.dot).toBe("pip-on");
     const painted = paintKeyBar(closed);
-    // With `Mods` (ADR 0024) the bar is 357 art pixels: still inside the 512 of the scene.
-    expect(painted.picture.width).toBeLessThan(380);
+    // Fullscreen and PiP by their glyphs alone: the bar fits in 321 of the scene's 512.
+    expect(painted.picture.width).toBeLessThan(330);
     expect(painted.picture.height).toBeLessThan(24);
     expect(painted.boxes).toHaveLength(7);
   });

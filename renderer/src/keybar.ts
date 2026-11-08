@@ -94,14 +94,8 @@ export function hintsForState(
 ): KeyHint[] {
   if (!guideOpen) {
     return [
-      { id: "view", key: { kind: "text", text: "V" }, label: "View" },
       { id: "guide", key: { kind: "text", text: "Tab" }, label: "Guide" },
-      {
-        id: "night",
-        key: { kind: "text", text: "N" },
-        label: "Night",
-        dot: sleepMode ? "moon-on" : "moon-off",
-      },
+      { id: "view", key: { kind: "text", text: "V" }, label: "View" },
       {
         id: "miracle",
         key: { kind: "text", text: "G" },
@@ -109,18 +103,25 @@ export function hintsForState(
         ...(miracleDot === undefined ? {} : { dot: miracleDot }),
       },
       {
+        id: "night",
+        key: { kind: "text", text: "N" },
+        label: "Night",
+        dot: sleepMode ? "moon-on" : "moon-off",
+      },
+      { id: "mods", key: { kind: "text", text: "M" }, label: "Mods" },
+      // Fullscreen and PiP are told by their glyphs alone, so the bar stays narrow.
+      {
         id: "fullscreen",
         key: { kind: "text", text: "F" },
-        label: "Full",
+        label: "",
         dot: fullscreen ? "full-on" : "full-off",
       },
       {
         id: "pip",
         key: { kind: "text", text: "P" },
-        label: "PiP",
+        label: "",
         dot: pip ? "pip-on" : "pip-off",
       },
-      { id: "mods", key: { kind: "text", text: "M" }, label: "Mods" },
     ];
   }
   if (tab === "species") {
@@ -215,7 +216,7 @@ export function paintKeycap(
 }
 
 function hintWidth(hint: KeyHint): number {
-  const base = keycapWidth(hint.key) + LABEL_GAP + measure(hint.label);
+  const base = keycapWidth(hint.key) + (hint.label === "" ? 0 : LABEL_GAP + measure(hint.label));
   if (hint.dot === undefined) return base;
   const is5px =
     hint.dot === "moon-off" ||
@@ -275,8 +276,11 @@ export function paintKeyBar(hints: readonly KeyHint[]): {
   for (const hint of hints) {
     const startX = cursor;
     const kw = paintKeycap(hint.key, cursor, top, (px, py, col) => put(px, py, col));
-    cursor += kw + LABEL_GAP;
-    cursor += draw(hint.label, cursor, top + 2, (px, py) => put(px, py, WORD_INK));
+    cursor += kw;
+    if (hint.label !== "") {
+      cursor += LABEL_GAP;
+      cursor += draw(hint.label, cursor, top + 2, (px, py) => put(px, py, WORD_INK));
+    }
     if (hint.dot !== undefined) {
       cursor += DOT_GAP;
       if (

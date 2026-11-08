@@ -828,6 +828,17 @@ async function start(): Promise<void> {
       toggleSleep();
       return;
     }
+    // `Esc` closes whatever is open; with nothing open it opens the mod menu. The desktop
+    // app's fullscreen keeps `Esc` as its way out.
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (modMenu.isOpen()) modMenu.close();
+      else if (fieldGuide.open) fieldGuide.close();
+      else if (isFullscreen && window.pywebview?.api?.toggle_fullscreen !== undefined) {
+        void toggleFullscreen();
+      } else toggleMods();
+      return;
+    }
     // The mod menu is modal: `M` opens it from anywhere, even with every mod off.
     if (modMenu.isOpen()) {
       if (modMenu.handleKey(event)) event.preventDefault();
@@ -841,14 +852,6 @@ async function start(): Promise<void> {
     if (fieldGuide.open) {
       if (event.key === "Tab") event.preventDefault();
       fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
-      return;
-    }
-    if (
-      event.key === "Escape" &&
-      isFullscreen &&
-      window.pywebview?.api?.toggle_fullscreen !== undefined
-    ) {
-      void toggleFullscreen();
       return;
     }
     if (event.key === "Tab") {
