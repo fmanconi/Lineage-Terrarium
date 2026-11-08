@@ -64,6 +64,22 @@ def _set_form_prop(form: Any, prop: str, value: Any) -> None:
         log.warning("Could not set %s on form", prop, exc_info=True)
 
 
+def _apply_native_form_decorations(form: Any) -> None:
+    """Set window icon and ensure presence on the Windows Taskbar."""
+    if form is None:
+        return
+    ico_path = REPO_ROOT / "lineage.ico"
+    if ico_path.is_file():
+        try:
+            import System.Drawing
+
+            icon = System.Drawing.Icon(str(ico_path))
+            _set_form_prop(form, "Icon", icon)
+        except Exception:
+            pass
+    _set_form_prop(form, "ShowInTaskbar", True)
+
+
 class DesktopApi:
     """JavaScript bridge exposed at ``window.pywebview.api`` inside the game window."""
 
@@ -90,7 +106,10 @@ class DesktopApi:
         try:
             from webview.platforms.winforms import BrowserView
 
-            return BrowserView.instances.get(self._window.uid)
+            form = BrowserView.instances.get(self._window.uid)
+            if form is not None:
+                _apply_native_form_decorations(form)
+            return form
         except Exception:
             return None
 
@@ -159,8 +178,8 @@ class DesktopApi:
         return {
             "active": self._miniature,
             "opacity": self._opacity,
-            "width": int(self._window.width) if self._window else 0,
-            "height": int(self._window.height) if self._window else 0,
+            "width": int(self._window.width) if self._window is not None else self._saved_size[0],
+            "height": int(self._window.height) if self._window is not None else self._saved_size[1],
         }
 
 
@@ -465,6 +484,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
 
     window.events.closing += on_closing
     window.events.closed += lambda: (tray.stop() if tray else None, shutdown())
+    window.events.shown += lambda: api._get_form()
     try:
         log.info("Starting webview event loop")
         webview.start(debug=False)

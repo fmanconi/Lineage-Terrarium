@@ -39,19 +39,22 @@ function Create-Shortcut([string]$DestinationPath, [string]$Title, [string]$Argu
 # 2. Registrazione nel Menu Start (Programs)
 $StartPrograms = [Environment]::GetFolderPath('Programs')
 $StartLnk = Join-Path $StartPrograms "Lineage Terrarium.lnk"
-Create-Shortcut -DestinationPath $StartLnk -Title "Lineage Terrarium"
+Create-Shortcut -DestinationPath $StartLnk -Title "Lineage Terrarium" -Arguments "-m lineage_server.desktop --title `"Lineage: Terrarium`""
+
+$StartLauncherLnk = Join-Path $StartPrograms "Lineage Launcher.lnk"
+Create-Shortcut -DestinationPath $StartLauncherLnk -Title "Lineage Launcher" -Arguments "-m lineage_server.launcher"
 
 # 3. Registrazione per la Barra delle Applicazioni (User Pinned)
 $TaskbarDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
 if (Test-Path $TaskbarDir) {
     $TaskbarLnk = Join-Path $TaskbarDir "Lineage Terrarium.lnk"
-    Create-Shortcut -DestinationPath $TaskbarLnk -Title "Lineage Terrarium"
+    Create-Shortcut -DestinationPath $TaskbarLnk -Title "Lineage Terrarium" -Arguments "-m lineage_server.desktop --title `"Lineage: Terrarium`""
 }
 
 # 4. Collegamento sul Desktop dell'utente
 $DesktopPath = [Environment]::GetFolderPath('Desktop')
 $DesktopLnk = Join-Path $DesktopPath "Lineage Terrarium.lnk"
-Create-Shortcut -DestinationPath $DesktopLnk -Title "Lineage Terrarium"
+Create-Shortcut -DestinationPath $DesktopLnk -Title "Lineage Terrarium" -Arguments "-m lineage_server.desktop --title `"Lineage: Terrarium`""
 
 Write-Host "`nInstallazione completata con successo!"
 Write-Host "Lineage: Terrarium e il suo Launcher sono ora disponibili nel Menu Start, sul Desktop e configurati per la Barra delle Applicazioni."
