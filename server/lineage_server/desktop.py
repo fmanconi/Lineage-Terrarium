@@ -303,13 +303,15 @@ APP_USER_MODEL_ID = "Federico.Lineage.Terrarium.1"
 
 
 def _set_app_user_model_id() -> None:
-    if sys.platform == "win32":
-        try:
+    try:
+        import sys
+
+        if sys.platform == "win32":
             import ctypes
 
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
 
 def main(argv: list[str] | None = None) -> None:
