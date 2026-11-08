@@ -28,3 +28,7 @@ data/
 renderer/public/stream/report/
 reports/R4-atmosphere/films/
 reports/R5-final/films/
+
+# Working notes and machine-specific guides: kept on disk, not published
+HANDOFF*.md
+privato/

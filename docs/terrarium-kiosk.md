@@ -148,5 +148,15 @@ uv sync
 systemctl --user restart lineage-terrarium-server.service lineage-terrarium-kiosk.service
 ```
 
+Or let the machine do it: `deploy/terrarium-update.sh` looks for new commits every two
+minutes and, when there are, pulls them, rebuilds what changed and restarts the server and
+the kiosk.
+
+```bash
+cp deploy/lineage-terrarium-autoupdate.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now lineage-terrarium-autoupdate.timer
+```
+
 Saves outlive code: every change to the saved state comes with a migration, so the island
 carries on where it was.

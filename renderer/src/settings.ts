@@ -22,9 +22,6 @@ export interface TerrariumSettings {
   fpsCap: FpsSetting;
 }
 
-/** Kept for backward compatibility: the settings were named after the fork's first host. */
-export type SmerdinoSettings = TerrariumSettings;
-
 export const SETTINGS_STORAGE_KEY = "lineage_terrarium_settings_v1";
 
 /** The key used before the fork was named Terrarium (ADR 0025); read when the new one is empty. */

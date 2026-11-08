@@ -49,7 +49,7 @@ $Status = Invoke-RestMethod -Uri "http://127.0.0.1:${Port}/status" -TimeoutSec 5
 Write-Host ("Isola locale (+{0} anni) attiva su 127.0.0.1:{1} -> World #{2}, data {3}" -f `
     $YearsAhead, $Port, $Status.world, $Status.date) -ForegroundColor Cyan
 
-# 3. Open chromeless pixel-art window (separate profile from Smerdino sync viewer so settings/sleepMode stay independent!)
+# 3. Open chromeless pixel-art window (a profile apart from the synced viewer, so their settings stay independent)
 $AppUrl = "http://127.0.0.1:${Port}/?desktop=1"
 $Browsers = @(
     "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",

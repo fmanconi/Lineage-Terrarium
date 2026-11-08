@@ -30,10 +30,15 @@ function Test-TcpPort([string]$TargetHost, [int]$TargetPort, [int]$TimeoutMs = 1
     return $false
 }
 
-# 1. Auto-discover the Terrarium server on the LAN first (mDNS), then Tailscale; the host
-#    names of the fork's first machine are tried last (ADR 0025)
+# 1. Auto-discover the Terrarium server: the hosts in LINEAGE_TERRARIUM_HOSTS first (a comma-
+#    separated list, for a machine with a name of its own), then on the LAN (mDNS), then Tailscale.
+$Candidates = @()
+if (-not [string]::IsNullOrWhiteSpace($env:LINEAGE_TERRARIUM_HOSTS)) {
+    $Candidates += $env:LINEAGE_TERRARIUM_HOSTS -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+}
+$Candidates += @("terrarium.local", "terrarium")
 if ([string]::IsNullOrWhiteSpace($ServerHost)) {
-    foreach ($candidate in @("terrarium.local", "terrarium", "smerdino.local", "smerdino")) {
+    foreach ($candidate in $Candidates) {
         if (Test-TcpPort -TargetHost $candidate -TargetPort $Port) {
             $ServerHost = $candidate
             break
@@ -42,7 +47,7 @@ if ([string]::IsNullOrWhiteSpace($ServerHost)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ServerHost)) {
-    throw "Impossibile raggiungere il server Terrarium sulla porta $Port (provati terrarium.local, terrarium, smerdino.local e smerdino). Passa -ServerHost <IP>."
+    throw "Impossibile raggiungere il server Terrarium sulla porta $Port (provati: $($Candidates -join ', ')). Passa -ServerHost <IP> o imposta LINEAGE_TERRARIUM_HOSTS."
 }
 
 $StatusUrl = "http://${ServerHost}:${Port}/status"
@@ -95,12 +100,8 @@ $Browsers = @(
 $BrowserExe = $Browsers | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if ($BrowserExe) {
-    # The viewer's profile keeps its settings; one made before the rename (ADR 0025) is reused.
+    # The viewer's own profile, which keeps its settings.
     $ProfileDir = Join-Path $env:LOCALAPPDATA "LineageTerrariumViewer"
-    $LegacyProfileDir = Join-Path $env:LOCALAPPDATA "LineageSmerdinoViewer"
-    if (-not (Test-Path $ProfileDir) -and (Test-Path $LegacyProfileDir)) {
-        $ProfileDir = $LegacyProfileDir
-    }
     $BrowserArgLine = "--user-data-dir=`"$ProfileDir`" --app=`"$AppUrl`" --window-size=1280,780"
     if ($Fullscreen) {
         $BrowserArgLine += " --start-fullscreen"
