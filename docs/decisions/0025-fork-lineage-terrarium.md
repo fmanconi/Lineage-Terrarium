@@ -46,5 +46,8 @@ else who would run the project.
 - Browsers that stored the old settings key keep their preferences; they are written back
   under the new key on the next change.
 - Code that imports `SmerdinoSettings` still compiles; new code uses `TerrariumSettings`.
-- Remote work on GitHub (repository name, description, links) is done later with the
-  owner; the `Documentation=` links in the units point to the current repository.
+- The GitHub repository was renamed `fmanconi/Lineage-Smerdino` → `fmanconi/Lineage-Terrarium`
+  on 2026-11-08; GitHub redirects the old address, so clones that still point there (the
+  install on smerdino) keep pulling. The `Documentation=` links and the clone commands point
+  to the new name. The local folder keeps its old name: the `.venv` holds absolute paths, and
+  the Start-menu shortcuts point into it.

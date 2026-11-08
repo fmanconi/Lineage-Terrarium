@@ -13,7 +13,7 @@
 
 [Unit]
 Description=Lineage: Terrarium kiosk screensaver (Chromium)
-Documentation=https://github.com/fmanconi/Lineage
+Documentation=https://github.com/fmanconi/Lineage-Terrarium
 Wants=lineage-terrarium-server.service
 After=lineage-terrarium-server.service graphical-session.target
 

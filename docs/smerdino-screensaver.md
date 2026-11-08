@@ -64,7 +64,7 @@ Interfaccia in-game interamente dipinta in pixel art (`512×300` art pixels, fon
 
 ### 1. Clonazione e Setup ambiente
 ```bash
-git clone https://github.com/fmanconi/Lineage-Smerdino.git ~/Lineage-Smerdino
+git clone https://github.com/fmanconi/Lineage-Terrarium.git ~/Lineage-Smerdino
 cd ~/Lineage-Smerdino
 
 # Installazione dipendenze con uv

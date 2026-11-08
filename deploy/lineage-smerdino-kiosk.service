@@ -1,6 +1,6 @@
 [Unit]
 Description=Lineage Kiosk Screensaver on Chromium (Smerdino)
-Documentation=https://github.com/fmanconi/Lineage
+Documentation=https://github.com/fmanconi/Lineage-Terrarium
 Wants=lineage-smerdino-server.service
 After=lineage-smerdino-server.service graphical-session.target
 

@@ -25,7 +25,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ## 2. Install
 
 ```bash
-git clone https://github.com/fmanconi/Lineage.git ~/Lineage-Terrarium
+git clone https://github.com/fmanconi/Lineage-Terrarium.git ~/Lineage-Terrarium
 cd ~/Lineage-Terrarium
 uv sync                                          # Python workspace
 (cd renderer && npm ci && npm run build:kiosk)   # the scene, into renderer/dist-kiosk

@@ -1,6 +1,6 @@
 [Unit]
 Description=Lineage Island Simulation (Smerdino Solar Cycle Server)
-Documentation=https://github.com/fmanconi/Lineage
+Documentation=https://github.com/fmanconi/Lineage-Terrarium
 Wants=network-online.target time-sync.target
 After=network-online.target time-sync.target
 
