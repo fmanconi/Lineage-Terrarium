@@ -77,7 +77,8 @@ export interface KeyHint {
   key: KeyGlyph;
   label: string;
   /** Optional status gem, crescent moon, fullscreen corner glyph, or PiP miniature window glyph. */
-  dot?: "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on" | "pip-off" | "pip-on";
+  dot?:
+    "ready" | "cooldown" | "moon-off" | "moon-on" | "full-off" | "full-on" | "pip-off" | "pip-on";
 }
 
 export type GuideTab = "species" | "lineage" | "island";
@@ -119,6 +120,7 @@ export function hintsForState(
         label: "PiP",
         dot: pip ? "pip-on" : "pip-off",
       },
+      { id: "mods", key: { kind: "text", text: "M" }, label: "Mods" },
     ];
   }
   if (tab === "species") {
@@ -219,7 +221,9 @@ function hintWidth(hint: KeyHint): number {
     hint.dot === "moon-off" ||
     hint.dot === "moon-on" ||
     hint.dot === "full-off" ||
-    hint.dot === "full-on";
+    hint.dot === "full-on" ||
+    hint.dot === "pip-off" ||
+    hint.dot === "pip-on";
   return base + DOT_GAP + (is5px ? 5 : DOT_SIZE);
 }
 

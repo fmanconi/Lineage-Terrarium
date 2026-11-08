@@ -116,8 +116,12 @@ import type { Rgb } from "./atmosphere/light";
 import { FieldGuide, type MiracleStatus } from "./fieldguide";
 import { createFrameCap } from "./framecap";
 import { KeyBar } from "./keybar";
+import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
+import { ModMenu } from "./mods/menu";
+import { ModRegistry, memoryStorage } from "./mods/registry";
 import {
   SETTINGS_STORAGE_KEY,
+  browserStorage,
   loadSettings,
   nightVeilAlpha,
   saveSettings,
@@ -396,10 +400,17 @@ async function start(): Promise<void> {
   );
   // The name card of the animal followed, in the top-left corner (R5).
   const card = new NameCard(WIDTH, HEIGHT);
-  // The naturalist's double-page field guide (`Tab` / `M`) and bottom-right key hint bar.
+  // The naturalist's double-page field guide (`Tab`) and bottom-right key hint bar.
   const fieldGuide = new FieldGuide(WIDTH, HEIGHT);
   const keyBar = new KeyBar(WIDTH, HEIGHT);
-  frame.append(captions.element, card.element, fieldGuide.element, keyBar.element);
+  // The mods (ADR 0024): the key bar is the first, and the mod menu (`M`) switches them.
+  const modStorage = browserStorage();
+  const mods = new ModRegistry(modStorage);
+  const dashboardMod = new DashboardButtonsMod(keyBar);
+  mods.register(dashboardMod);
+  const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
+  frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
+  mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });
   // The showcase's lines and titles, and its frame counter with `?fps`.
   const overlay = showcasing ? new Overlay(WIDTH, HEIGHT) : null;
   if (overlay !== null) frame.append(overlay.title, overlay.line, overlay.counter);
@@ -693,6 +704,11 @@ async function start(): Promise<void> {
     if (fieldGuide.open) void pollMiracle();
   };
 
+  const toggleMods = (): void => {
+    if (!modMenu.isOpen() && fieldGuide.open) fieldGuide.close();
+    modMenu.toggle();
+  };
+
   const toggleSleep = (): void => {
     updateSettings({ ...settings, sleepMode: !settings.sleepMode });
     if (settings.sleepMode && fieldGuide.open) fieldGuide.close();
@@ -806,6 +822,16 @@ async function start(): Promise<void> {
       toggleSleep();
       return;
     }
+    // The mod menu is modal: `M` opens it from anywhere, even with every mod off.
+    if (modMenu.isOpen()) {
+      if (modMenu.handleKey(event)) event.preventDefault();
+      return;
+    }
+    if (event.key === "m" || event.key === "M") {
+      toggleMods();
+      return;
+    }
+    if (mods.dispatchKey(event)) return;
     if (fieldGuide.open) {
       if (event.key === "Tab") event.preventDefault();
       fieldGuide.handleKey(event.key, herd.speciesGuide(), settings, guideCallbacks);
@@ -819,8 +845,8 @@ async function start(): Promise<void> {
       void toggleFullscreen();
       return;
     }
-    if (event.key === "Tab" || event.key === "m" || event.key === "M") {
-      if (event.key === "Tab") event.preventDefault();
+    if (event.key === "Tab") {
+      event.preventDefault();
       toggleGuide();
       return;
     }
@@ -847,9 +873,11 @@ async function start(): Promise<void> {
     const rect = frame.getBoundingClientRect();
     const artX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * WIDTH;
     const artY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * HEIGHT;
-    const barHit = keyBar.hitAt(artX, artY);
+    if (modMenu.handlePointer(artX, artY)) return;
+    const barHit = dashboardMod.hitAt(artX, artY);
     if (barHit !== null) {
-      if (barHit === "guide") toggleGuide();
+      if (barHit === "mods") toggleMods();
+      else if (barHit === "guide") toggleGuide();
       else if (barHit === "night") toggleSleep();
       else if (barHit === "fullscreen") void toggleFullscreen();
       else if (barHit === "pip") void togglePiP();
@@ -867,6 +895,7 @@ async function start(): Promise<void> {
       }
       return;
     }
+    if (mods.dispatchPointer(artX, artY, event)) return;
     if (fieldGuide.handlePointer(artX, artY, settings, guideCallbacks)) return;
     press();
   });
@@ -1229,7 +1258,7 @@ async function start(): Promise<void> {
           : rawLamp;
 
     if (KIOSK && !desktop) {
-      const wantCursor = fieldGuide.open ? "default" : "none";
+      const wantCursor = fieldGuide.open || modMenu.isOpen() ? "default" : "none";
       if (document.documentElement.style.cursor !== wantCursor) {
         document.documentElement.style.cursor = wantCursor;
       }
@@ -1285,7 +1314,7 @@ async function start(): Promise<void> {
           ? "ready"
           : "cooldown";
     const effectiveBarMode = automatedRun && !userInteracted ? "hidden" : settings.keyBarMode;
-    keyBar.update(dtS, {
+    const barOptions: KeyBarOptions = {
       mode: effectiveBarMode,
       guideOpen: fieldGuide.open,
       tab: fieldGuide.tab,
@@ -1295,7 +1324,10 @@ async function start(): Promise<void> {
       pip: isPiP,
       scrollShowing,
       lamp,
-    });
+    };
+    // The frame's state for the mods: the key bar's options, which the dashboard mod reads.
+    mods.dispatchUpdate(dtS, barOptions);
+    modMenu.update(dtS, lamp);
 
     if (showcase !== null && overlay !== null) {
       const { act } = showcase.now;

@@ -41,7 +41,8 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
-function browserStorage(): StorageLike | null {
+/** The browser's `localStorage`, or null where it is missing or refused (kiosk sandbox, tests). */
+export function browserStorage(): StorageLike | null {
   try {
     return typeof localStorage === "undefined" ? null : localStorage;
   } catch {

@@ -48,7 +48,7 @@ longitude = 10.4017  # Fuso Europe/Rome
 
 ### D. Taccuino delle Specie (`Field Guide`), Regia Screensaver, Miracolo & Barra Tasti
 Interfaccia in-game interamente dipinta in pixel art (`512×300` art pixels, font bitmap `pixelfont.ts`, cornici in legno smussato e carta crema come `card.ts`, illuminazione notturna calda `lantern`):
-- **Tasto `Tab` o `M` — Taccuino da Naturalista a 3 segnalibri** (con auto-chiusura dopo 15 minuti di inattività):
+- **Tasto `Tab` — Taccuino da Naturalista a 3 segnalibri** (con auto-chiusura dopo 15 minuti di inattività):
   1. **`1 Species` (Specie Viventi & Tavola Anatomica)**: censimento live dell'isola (specie vive/estinte, proporzione erbivori/onnivori/predatori) e scheda dettagliata con ritratto procedurale `44×44` (`Portraits`), barre dei geni medi (`Size`, `Diet`, `Speed`, `Armour`, `Water`, `Sense`), icone `7×7` dei geni rari e stato live. Premendo **`Enter`** il taccuino si chiude e la telecamera `local` insegue dal vivo un esemplare sveglio di quella specie.
   2. **`2 Lineage` (Albero Filogenetico)**: cladogramma evolutivo a doppia pagina che traccia i ceppi fondatori, le speciazioni figlie e i rami estinti (`†`).
   3. **`3 Island` (Regia Screensaver, Cielo di Pisa & Miracolo Settimanale)**:
@@ -56,6 +56,7 @@ Interfaccia in-game interamente dipinta in pixel art (`512×300` art pixels, fon
      - **Opzioni Screensaver** (salvate in `localStorage`): *Camera Director* (`Rest on Map` dopo 15m vs `Auto-Tour` documentario autonomo `map → middle → local`), *Night Dimmer* (`Normal` / `Soft Dim` / `Dark Room` per attenuare ulteriormente il chiarore notturno in camera da letto), *Key Hint Bar* (`Auto 10s` / `Always` / `Hidden`), *Chronicle Scrolls* (`Shown` / `Quiet`) e *Frame Rate Cap* (`30 FPS` / `60 FPS`).
      - **Miracolo Settimanale (`God Power`, tasto `G` o endpoint `GET/POST /god-power`)**: espone via HTTP locale per il solo desk il pulsante fisico di Lineage con ricarica reale di **7 giorni**, mostrando il conto alla rovescia e i bisogni ecologici dell'isola (`Rain`, `Seed`, `Ark`).
 - **Micro-Barra Tasti in basso a destra (`KeyBar`)**: mostra i comandi contestuali con keycap in pixel art (`[V] View`, `[Tab] Guide`, `[G] Miracle`), scomparendo dolcemente dopo 10 secondi di inattività per lasciare il quadro pulito.
+- **Tasto `M` — Menù Mod** (ADR 0024, `renderer/src/mods/`): finestra in pixel art con le mod del renderer, ciascuna `ON`/`OFF` (`↑/↓` per scegliere, `Spazio`/`Enter` o un clic per invertire, `Esc`/`M` o un clic fuori per chiudere); lo stato resta in `localStorage` (`lineage_mods_state_v1`). La prima mod, *Dashboard Buttons*, è la barra tasti qui sopra (con il nuovo bottone `[M] Mods`): spenta, la barra sparisce e l'isola resta nuda. `M` apre il menù anche con tutte le mod spente.
 
 ---
 

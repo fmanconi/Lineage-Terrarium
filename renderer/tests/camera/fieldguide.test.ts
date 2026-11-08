@@ -259,14 +259,23 @@ describe("Herd speciesGuide census on recorded island", () => {
 describe("Bottom-right KeyBar", () => {
   it("paints crisp keycaps and adapts hints to open guide tabs", () => {
     const closed = hintsForState(false, "species", "ready", true, true, true);
-    expect(closed.map((h) => h.id)).toEqual(["view", "guide", "night", "miracle", "fullscreen", "pip"]);
+    expect(closed.map((h) => h.id)).toEqual([
+      "view",
+      "guide",
+      "night",
+      "miracle",
+      "fullscreen",
+      "pip",
+      "mods",
+    ]);
     expect(closed.find((h) => h.id === "night")?.dot).toBe("moon-on");
     expect(closed.find((h) => h.id === "fullscreen")?.dot).toBe("full-on");
     expect(closed.find((h) => h.id === "pip")?.dot).toBe("pip-on");
     const painted = paintKeyBar(closed);
-    expect(painted.picture.width).toBeLessThan(320);
+    // With `Mods` (ADR 0024) the bar is 357 art pixels: still inside the 512 of the scene.
+    expect(painted.picture.width).toBeLessThan(380);
     expect(painted.picture.height).toBeLessThan(24);
-    expect(painted.boxes).toHaveLength(6);
+    expect(painted.boxes).toHaveLength(7);
   });
 
   it("auto-hides after 10s of stillness and wakes on activity", () => {

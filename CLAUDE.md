@@ -114,7 +114,9 @@ lineage/
 │   │   │                     #   terrain/groundcache.ts (R5: painted ground kept between visits),
 │   │   │                     #   plants/standing.ts + standing.worker.ts and plants/artcache.ts
 │   │   │                     #   (R5: plant sheets drawn in a worker, kept between loads),
-│   │   │                     #   iris.ts (R5: the live iris and loading ring between views)
+│   │   │                     #   iris.ts (R5: the live iris and loading ring between views),
+│   │   │                     #   mods/ (ADR 0024: the mod protocol, registry and menu `M`;
+│   │   │                     #   builtin/dashboard-buttons.ts, the key bar as the first mod)
 │   │   ├── sheets/           # look sheets of the real scene (land.html, R1)
 │   │   └── spike/            # R0 spike: the scene, its in-page benchmark (spike.html),
 │   │                         #   the look sheet (look.html) and the creature sheet (R2);
