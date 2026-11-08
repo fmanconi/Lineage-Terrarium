@@ -106,7 +106,7 @@ describe("Biophony & Soundscape Mod", () => {
     const mod = new BiophonyMod();
     expect(mod.meta.id).toBe("biophony-soundscape");
     expect(mod.meta.name).toBe("Biophony & Soundscape");
-    expect(mod.meta.defaultEnabled).toBe(false);
+    expect(mod.meta.defaultEnabled).toBe(true);
   });
 
   it("enables and disables cleanly", () => {
