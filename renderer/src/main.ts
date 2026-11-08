@@ -118,6 +118,7 @@ import { createFrameCap } from "./framecap";
 import { KeyBar } from "./keybar";
 import { ChristmasMod } from "./mods/builtin/christmas";
 import { DashboardButtonsMod, type KeyBarOptions } from "./mods/builtin/dashboard-buttons";
+import { PackWarfareMod } from "./mods/builtin/pack-warfare";
 import { PurposefulWandererMod } from "./mods/builtin/wanderer";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -412,6 +413,7 @@ async function start(): Promise<void> {
   mods.register(dashboardMod);
   mods.register(new PurposefulWandererMod());
   mods.register(new ChristmasMod());
+  mods.register(new PackWarfareMod());
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   frame.append(captions.element, card.element, fieldGuide.element, keyBar.element, modMenu.element);
   mods.initAll({ frame, width: WIDTH, height: HEIGHT, storage: modStorage ?? memoryStorage() });

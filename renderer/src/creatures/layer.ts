@@ -137,11 +137,19 @@ import {
   sunny,
   type Basker,
 } from "./basking";
-import { Sparks } from "./sparks";
+import { Sparks, pixelTexture, type SparkKind } from "./sparks";
 import { envenom } from "./venom";
 import { WAKE_EVERY_PX, WAKE_FROM, wakePair } from "./wake";
 import type { Random } from "../rng";
 import { isChristmasActive } from "../mods/builtin/christmas";
+import { isPackWarfareActive } from "../mods/builtin/pack-warfare";
+import {
+  newPackState,
+  updatePackDynamics,
+  type Nest,
+  type PackHooks,
+  type PackState,
+} from "./pack";
 
 /** Wandering: how fast the turn rate drifts and settles (per second). */
 /**
@@ -157,6 +165,22 @@ const OUT_OF_SIGHT_EVERY = 3;
  * (R5, the board: the crowded middle view came late; up close every update poses).
  */
 const POSE_SKIP_EVERY = 3;
+/**
+ * The Pack, Colonies & Territorial Warfare mod (`creatures/pack.ts`): the packs are looked
+ * at once in this many seconds, not every frame (every pair of animals is compared).
+ */
+const PACK_EVERY_S = 0.2;
+/** A face-off's sparks: this many, this colour, for this long (seconds), rising this fast (art pixels a second). */
+const SKIRMISH_SPARKS = 3;
+const SKIRMISH_COLOUR = 0xffd25a;
+const SKIRMISH_S = 0.6;
+const SKIRMISH_RISE = 6;
+/** A nest's twigs and stones, on a 4×4 art-pixel patch with its corners left bare. */
+const NEST_TWIGS = 0x7a5530;
+const NEST_STONES = 0x9c968c;
+const NEST_SHAPE = [".##.", "####", "####", ".##."];
+/** How many ways a nest is laid out; a species always has the same one. */
+const NEST_LOOKS = 8;
 
 const TURN_JITTER = 6;
 const TURN_DAMPING = 1.5;
@@ -256,6 +280,13 @@ interface Leg {
 
 interface Creature {
   plan: BodyPlan;
+  /** Its species (the sim's id; one drawn by colour when it has none yet), for the packs. */
+  species: number;
+  /** Not grown yet, and a mother (tending a brood or trailed by a young one): for the nests. */
+  young: boolean;
+  nurturing: boolean;
+  /** What the packs keep of it between passes (`creatures/pack.ts`). */
+  pack: PackState;
   container: Container;
   marker: Container;
   joints: Point[];
@@ -467,6 +498,20 @@ export class CreatureLayer {
    */
   readonly floor = new Container();
   private foam: Sparks | null = null;
+  /**
+   * The packs (the Pack, Colonies & Territorial Warfare mod): seconds since they were last
+   * looked at, the nests drawn on the floor (made as colonies come), and how the layer
+   * answers the packs' questions (made once).
+   */
+  private packLag = 0;
+  private readonly nests: Sprite[] = [];
+  private readonly packHooks: PackHooks<Creature> = {
+    idle: (creature) => this.steerable(creature),
+    free: (creature, x, y) => this.clear(creature, x, y),
+    skirmish: (x, y) => {
+      this.skirmish(x, y);
+    },
+  };
   /** How overcast the sky is (0–1, R4's): no animal basks under cloud. */
   private overcast = 0;
   /** Creatures that died, going where they fell. */
@@ -611,6 +656,8 @@ export class CreatureLayer {
     // Asleep it sleeps on, lying as it lay (R5).
     carrySleep(creature.sleep, old.sleep);
     creature.drench = old.drench;
+    // A face-off under way goes on (the packs, `creatures/pack.ts`).
+    creature.pack = old.pack;
     if (old.sleep.share > 0 && old.joints.length === creature.joints.length) {
       creature.joints.forEach((joint, i) => {
         joint.x = old.joints[i]?.x ?? joint.x;
@@ -1630,6 +1677,7 @@ export class CreatureLayer {
     this.ticks += 1;
     const lived = dtS;
     const hats = isChristmasActive() && this.showing === "bodies";
+    this.packs(dtS);
     for (let index = 0; index < this.active; index++) {
       const creature = this.creatures[index];
       if (creature === undefined) continue;
@@ -1714,6 +1762,98 @@ export class CreatureLayer {
     dtS = lived;
     this.spray?.update(dtS);
     this.fell = this.falling;
+  }
+
+  /**
+   * The packs (the Pack, Colonies & Territorial Warfare mod, `creatures/pack.ts`), looked
+   * at once every `PACK_EVERY_S`: strolls steered, face-offs played, the nests drawn. Off,
+   * the nests are put away.
+   */
+  private packs(dtS: number): void {
+    if (!isPackWarfareActive()) {
+      this.packLag = 0;
+      for (const nest of this.nests) nest.visible = false;
+      return;
+    }
+    this.packLag += dtS;
+    if (this.packLag < PACK_EVERY_S) return;
+    const lived = this.packLag;
+    this.packLag = 0;
+    // Mothers: tending a brood, or trailed by a young one.
+    for (const creature of this.creatures) {
+      if (creature !== undefined) creature.nurturing = creature.tending !== undefined;
+    }
+    for (const creature of this.creatures) {
+      if (creature?.leader === undefined) continue;
+      const mother = this.creatures[creature.leader];
+      if (mother !== undefined && mother !== creature) mother.nurturing = true;
+    }
+    this.drawNests(updatePackDynamics(this.creatures, lived, this.packHooks));
+  }
+
+  /** Whether the packs may steer an animal: not hunting, eating, asleep, held or shaking. */
+  private steerable(creature: Creature): boolean {
+    return (
+      creature.motion !== null &&
+      !creature.torpid &&
+      creature.pinned !== true &&
+      creature.staged !== true &&
+      creature.arriving === undefined &&
+      creature.hunt === undefined &&
+      creature.held === undefined &&
+      creature.tending === undefined &&
+      creature.court === undefined &&
+      creature.food === "none" &&
+      creature.sleep.share === 0 &&
+      creature.drench.age < 0
+    );
+  }
+
+  /** Sparks rising between two rivals facing off at (x, y), cells. */
+  private skirmish(x: number, y: number): void {
+    if (this.showing !== "bodies") return;
+    const pool = this.sparkPool();
+    const kind = skirmishKind();
+    for (let k = 0; k < SKIRMISH_SPARKS; k++) {
+      const aside = (k - (SKIRMISH_SPARKS - 1) / 2) * SKIRMISH_RISE;
+      pool.emit(kind, SKIRMISH_COLOUR, x, y, aside, -SKIRMISH_RISE, k * 0.1);
+    }
+  }
+
+  /** A nest of twigs and stones at each colony's middle, on land; the others put away. */
+  private drawNests(nests: readonly Nest[]): void {
+    const { pixels } = this.body;
+    let drawn = 0;
+    for (const nest of nests) {
+      if (!this.passable(nest.x, nest.y, false)) continue;
+      const look = nestTextures(nestLook(nest.species));
+      let sprite = this.nests[drawn];
+      if (sprite === undefined) {
+        sprite = new Sprite({ texture: look.twigs, anchor: 0.5 });
+        sprite.scale.set(1 / pixels);
+        sprite.addChild(new Sprite({ texture: look.stones, anchor: 0.5 }));
+        this.floor.addChild(sprite);
+        this.nests.push(sprite);
+      }
+      const stones = sprite.children[0];
+      sprite.texture = look.twigs;
+      sprite.tint = NEST_TWIGS;
+      if (stones instanceof Sprite) {
+        stones.texture = look.stones;
+        stones.tint = NEST_STONES;
+      }
+      // On the art pixels' grid, as everything drawn in the scene.
+      sprite.position.set(
+        Math.round(nest.x * pixels) / pixels,
+        Math.round(nest.y * pixels) / pixels,
+      );
+      sprite.visible = true;
+      drawn++;
+    }
+    for (let k = drawn; k < this.nests.length; k++) {
+      const sprite = this.nests[k];
+      if (sprite !== undefined) sprite.visible = false;
+    }
   }
 
   /**
@@ -1904,6 +2044,10 @@ export class CreatureLayer {
 
     return {
       plan,
+      species: seed.species !== 0 ? seed.species : -1 - plan.colour,
+      young,
+      nurturing: false,
+      pack: newPackState(),
       motion: this.life === "anchored" ? newMotion({ x, y }, heading) : null,
       chest: plan.radii.indexOf(Math.max(...plan.radii)),
       breathOffset: random(),
@@ -2629,4 +2773,52 @@ function sameJoints(kept: Float64Array, joints: readonly Point[]): boolean {
     if (kept[2 * i] !== joint.x || kept[2 * i + 1] !== joint.y) return false;
   }
   return true;
+}
+
+let skirmishSparks: SparkKind | null = null;
+
+/** A face-off's spark: a plus that shrinks to a dot (the pack mod). */
+function skirmishKind(): SparkKind {
+  skirmishSparks ??= {
+    frames: [pixelTexture([".#.", "###", ".#."]), pixelTexture(["#"])],
+    lasts: SKIRMISH_S,
+    fadesAt: 0.6,
+  };
+  return skirmishSparks;
+}
+
+/** Which of the `NEST_LOOKS` layouts a species' nests have (a hash of its id). */
+function nestLook(species: number): number {
+  const hash = Math.imul(species ^ 0x5bd1e995, 0x27d4eb2d) >>> 0;
+  return (hash >>> 7) % NEST_LOOKS;
+}
+
+const nestLooks = new Map<number, { twigs: Texture; stones: Texture }>();
+
+/**
+ * A nest's drawing in layout `look`: each texel of `NEST_SHAPE` a twig or a stone, as the
+ * layout's bits say, about one in three a stone; drawn in white, tinted by the caller.
+ */
+function nestTextures(look: number): { twigs: Texture; stones: Texture } {
+  let textures = nestLooks.get(look);
+  if (textures === undefined) {
+    let bits = Math.imul(look + 1, 0x9e3779b1) >>> 0;
+    const twigs: string[] = [];
+    const stones: string[] = [];
+    for (const row of NEST_SHAPE) {
+      let twig = "";
+      let stone = "";
+      for (const texel of row) {
+        bits = (Math.imul(bits ^ (bits >>> 15), 0x2c1b3c6d) + 1) >>> 0;
+        const isStone = texel === "#" && bits % 3 === 0;
+        twig += texel === "#" && !isStone ? "#" : ".";
+        stone += isStone ? "#" : ".";
+      }
+      twigs.push(twig);
+      stones.push(stone);
+    }
+    textures = { twigs: pixelTexture(twigs), stones: pixelTexture(stones) };
+    nestLooks.set(look, textures);
+  }
+  return textures;
 }
