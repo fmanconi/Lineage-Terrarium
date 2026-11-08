@@ -362,15 +362,15 @@ def _run_desktop(args: argparse.Namespace) -> None:
             shutdown()
         return
 
-    import webbrowser
-
-    try:
-        webbrowser.open(url)
-        log.info("Opened default browser tab at %s", url)
-    except Exception:
-        log.warning("Could not open default browser tab automatically")
-
     if args.browser:
+        import webbrowser
+
+        try:
+            webbrowser.open(url)
+            log.info("Opened default browser tab at %s", url)
+        except Exception:
+            log.warning("Could not open default browser tab automatically")
+
         log.info("Running in headless browser server mode; press Ctrl+C to stop")
         try:
             while True:
@@ -384,6 +384,14 @@ def _run_desktop(args: argparse.Namespace) -> None:
     try:
         import webview  # Lazy import so headless Linux servers never need pywebview
     except ImportError:
+        import webbrowser
+
+        try:
+            webbrowser.open(url)
+            log.info("pywebview not installed; opened default browser tab at %s", url)
+        except Exception:
+            log.warning("Could not open default browser tab automatically")
+
         log.info("pywebview not installed; running in browser server mode")
         try:
             while True:
