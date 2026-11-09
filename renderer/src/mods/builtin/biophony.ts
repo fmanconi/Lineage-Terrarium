@@ -490,6 +490,80 @@ export class BiophonyEngine {
     return true;
   }
 
+  /** Trigger procedural territorial roar / bellow during pack clashes and Alpha duels */
+  triggerRoar(): void {
+    if (!this.ctx || !this.masterGain || this.settings.muted) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const now = this.ctx.currentTime;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(75, now + 0.6);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.24, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.75);
+    } catch {
+      // Audio safety
+    }
+  }
+
+  /** Trigger subtle procedural peep / nest murmur in presence of young */
+  triggerNestPeep(): void {
+    if (!this.ctx || !this.masterGain || this.settings.muted) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const now = this.ctx.currentTime;
+      osc.type = "sine";
+      const startFreq = 3100 + Math.random() * 400;
+      osc.frequency.setValueAtTime(startFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(startFreq * 1.2, now + 0.03);
+      osc.frequency.exponentialRampToValueAtTime(startFreq * 0.9, now + 0.07);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch {
+      // Audio safety
+    }
+  }
+
+  /** Trigger subtle procedural grass rustle / flocking footstep */
+  triggerFootsteps(): void {
+    if (!this.ctx || !this.masterGain || this.settings.muted) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const now = this.ctx.currentTime;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(110 + Math.random() * 30, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.04);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.06, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } catch {
+      // Audio safety
+    }
+  }
+
   /** Trigger thunder sub-bass rumble on storm lightning */
   triggerThunder(): void {
     if (!this.ctx || !this.masterGain || this.settings.muted) return;
@@ -585,6 +659,8 @@ export class BiophonyMod implements Mod {
   private toastTimerS = 0;
   private screenWidth = 512;
   private screenHeight = 300;
+  private roarCooldownS = 0;
+  private peepCooldownS = 0;
 
   constructor() {
     this.screenContainer.addChild(this.toastGfx);
@@ -722,6 +798,24 @@ export class BiophonyMod implements Mod {
 
     if (options.thunder === true) {
       biophonyEngine.requestThunder();
+    }
+
+    // Biophony 2.0 social sounds: territorial roars during duels/clashes & soft nest peeps
+    this.roarCooldownS = Math.max(0, this.roarCooldownS - dtS);
+    this.peepCooldownS = Math.max(0, this.peepCooldownS - dtS);
+
+    if (Array.isArray(options.animals)) {
+      type Anim = { fighting?: boolean; young?: boolean };
+      for (const a of options.animals as Anim[]) {
+        if (a.fighting && this.roarCooldownS <= 0) {
+          biophonyEngine.triggerRoar();
+          this.roarCooldownS = 5.0;
+        }
+        if (a.young && this.peepCooldownS <= 0 && Math.random() < 0.05) {
+          biophonyEngine.triggerNestPeep();
+          this.peepCooldownS = 6.0;
+        }
+      }
     }
   }
 }

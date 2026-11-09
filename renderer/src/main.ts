@@ -134,6 +134,8 @@ import { EcoHeatmapMod } from "./mods/builtin/eco-heatmap";
 import { BiophonyMod, biophonyEngine, isBiophonyActive } from "./mods/builtin/biophony";
 import { XlScaleMod } from "./mods/builtin/xl-scale";
 import { FormicariumMod } from "./mods/builtin/formicarium";
+import { FaunaAnalystMod } from "./mods/builtin/fauna-analyst";
+import { ExplorerCctvMod } from "./mods/builtin/explorer-cctv";
 import { loadUserMods } from "./mods/loader";
 import { ModMenu } from "./mods/menu";
 import { ModRegistry, memoryStorage } from "./mods/registry";
@@ -453,6 +455,10 @@ async function start(): Promise<void> {
   const xlScale = new XlScaleMod();
   mods.register(xlScale);
   mods.register(new FormicariumMod());
+  const faunaAnalystMod = new FaunaAnalystMod();
+  mods.register(faunaAnalystMod);
+  const explorerCctvMod = new ExplorerCctvMod();
+  mods.register(explorerCctvMod);
   const modMenu = new ModMenu(WIDTH, HEIGHT, mods);
   // The miniature shows the scene alone: no scroll, no name card, no key bar.
   if (pipWindow) frame.append(fieldGuide.element, modMenu.element);
@@ -1231,6 +1237,12 @@ async function start(): Promise<void> {
       scene.ready = director.looksAhead ? landscape.openTo >= IRIS_FROM : landscape.settled;
       scene.place = scroll.phase === "roll-up" || atmosphere.ending ? null : entry;
       shot = director.update(dtS, scene);
+      if (explorerCctvMod.isFreeRoam()) {
+        const target = explorerCctvMod.getTargetPosition();
+        if (target) {
+          shot = { ...shot, centre: target };
+        }
+      }
     } else {
       // The map shows the whole world whatever is asked.
       const centre: Point =
@@ -1502,6 +1514,9 @@ async function start(): Promise<void> {
       view: shot.view,
       tile: scale,
       light: atmoState.light,
+      camX: shot.centre.x,
+      camY: shot.centre.y,
+      focusedId: shot.subject,
     };
     mods.dispatchUpdate(dtS, modOptions);
     modMenu.update(dtS, lamp);

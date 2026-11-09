@@ -281,15 +281,37 @@ export function updatePackDynamics<M extends PackMember>(
     for (let j = i + 1; j < living.length; j++) {
       const b = living[j] as M;
       const bh = headOf(b) as Point;
-      if (b.species === a.species || facing.has(b)) continue;
+      if (facing.has(b)) continue;
+      const sameSpecies = b.species === a.species;
+      if (sameSpecies) {
+        // Intra-species ritual duel for Alpha role: mature adults near nest
+        const nestA = nestOf.get(a);
+        const nearNest = nestA !== undefined && apart(ah, nestA) <= 3.5;
+        const isAlphaDuel =
+          nearNest &&
+          !a.young &&
+          !b.young &&
+          !a.nurturing &&
+          !b.nurturing &&
+          (a.plan.length >= 1.2 || b.plan.length >= 1.2);
+        if (!isAlphaDuel) continue;
+      }
       if (apart(ah, bh) >= RIVAL_CELLS || !ready(b)) continue;
-      const winner = packAdvantage(a, b, living);
+      const winner = sameSpecies
+        ? a.plan.length > b.plan.length
+          ? "a"
+          : b.plan.length > a.plan.length
+            ? "b"
+            : "even"
+        : packAdvantage(a, b, living);
+      const stareTime = sameSpecies ? 1.2 : STARE_S;
+      const restTime = sameSpecies ? 60 : STANDOFF_REST_S;
       for (const [one, other, loses] of [
         [a, bh, winner === "b"],
         [b, ah, winner === "a"],
       ] as const) {
-        one.pack.stare = STARE_S;
-        one.pack.rest = STANDOFF_REST_S;
+        one.pack.stare = stareTime;
+        one.pack.rest = restTime;
         one.pack.rival.x = other.x;
         one.pack.rival.y = other.y;
         one.pack.retreats = loses;
@@ -345,6 +367,20 @@ export function updatePackDynamics<M extends PackMember>(
         goal.y = head.y + Math.sin(away) * step;
         if (strollTo(member, motion, goal, free)) state.mode = motion.mode;
         continue;
+      }
+      // Reactive wake from pause: if 2 or more mates in pack are strolling, wake up and follow
+      const strollingMates = mates.filter((m) => m.motion?.mode === "stroll");
+      if (strollingMates.length >= 2) {
+        const heading = meanHeading(strollingMates);
+        if (!Number.isNaN(heading)) {
+          goal.x = head.x + Math.cos(heading) * member.plan.length * 1.5;
+          goal.y = head.y + Math.sin(heading) * member.plan.length * 1.5;
+          withinLeash(motion, member.plan.length, goal);
+          if (strollTo(member, motion, goal, free)) {
+            state.mode = motion.mode;
+            continue;
+          }
+        }
       }
       const near = mates.filter((mate) => apart(head, headOf(mate) as Point) < PACK_CELLS);
       const heading = meanHeading(near);

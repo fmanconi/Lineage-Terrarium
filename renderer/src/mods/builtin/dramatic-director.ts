@@ -107,8 +107,8 @@ export class DramaticDirectorEngine {
         x,
         y,
         score: 100,
-        label: species > 0 ? `Nuova Mutazione (Sp. ${species})` : "Nuova Mutazione Rara",
-        durationS: 22,
+        label: species > 0 ? "Nuova Mutazione Ereditaria" : "Nuova Mutazione Rara",
+        durationS: 45,
       });
     } else {
       this.recordEvent({
@@ -119,7 +119,7 @@ export class DramaticDirectorEngine {
         y,
         score: 85,
         label: parentId !== undefined ? "Nuova Nascita" : "Nuova Creatura",
-        durationS: 18,
+        durationS: 38,
       });
     }
   }
@@ -134,7 +134,7 @@ export class DramaticDirectorEngine {
       y,
       score: 80,
       label: "Scontro tra branchi",
-      durationS: 16,
+      durationS: 40,
     });
   }
 
@@ -148,7 +148,7 @@ export class DramaticDirectorEngine {
       y,
       score: 70,
       label: "Corteggiamento",
-      durationS: 15,
+      durationS: 35,
     });
   }
 
@@ -162,7 +162,7 @@ export class DramaticDirectorEngine {
       y,
       score: 82,
       label: "Caccia e Predazione",
-      durationS: 16,
+      durationS: 38,
     });
   }
 
@@ -177,7 +177,7 @@ export class DramaticDirectorEngine {
         y,
         score: 82,
         label: "Predazione Riuscita",
-        durationS: 15,
+        durationS: 35,
       });
     } else {
       this.recordEvent({
@@ -188,7 +188,7 @@ export class DramaticDirectorEngine {
         y,
         score: 60,
         label: cause === "starved" ? "Fine Vita: Inedia" : "Fine Ciclo Naturale",
-        durationS: 12,
+        durationS: 32,
       });
     }
   }
@@ -211,7 +211,7 @@ export class DramaticDirectorEngine {
       y,
       score: 95,
       label,
-      durationS: 20,
+      durationS: 48,
     });
   }
 
@@ -263,14 +263,21 @@ export class DramaticDirectorEngine {
     const candidates = scene.subjects.filter((s) => s.id !== without);
     if (candidates.length === 0) return null;
 
-    // Prefer active (non-torpid) creatures
+    // Prefer active (non-torpid) creatures with narrative continuity (neighbors / same species)
     const activeCandidates = candidates.filter((s) => !s.torpid);
-    const pool = activeCandidates.length > 0 ? activeCandidates : candidates;
+    let pool = activeCandidates.length > 0 ? activeCandidates : candidates;
+    const prev = without !== null ? scene.subjects.find((s) => s.id === without) : null;
+    if (prev && activeCandidates.length > 1) {
+      const near = activeCandidates.filter(
+        (s) => Math.hypot(s.x - prev.x, s.y - prev.y) <= 8 || s.species === prev.species,
+      );
+      if (near.length > 0) pool = near;
+    }
 
     const chosen = pool[Math.floor(random() * pool.length)] ?? null;
     if (chosen !== null) {
       this.activeEvent = null;
-      this.activeLabel = chosen.species > 0 ? `Osservazione Specie ${chosen.species}` : null;
+      this.activeLabel = chosen.species > 0 ? `Osservazione Fauna #${chosen.species}` : null;
       this.labelTimer = chosen.species > 0 ? 3.5 : 0;
       this.lastSubjectId = chosen.id;
     }
@@ -295,13 +302,13 @@ export class DramaticDirectorEngine {
   currentFollowTime(subject: Subject | null, random: () => number): number {
     if (!this.active) return 300;
     if (this.activeEvent !== null) {
-      return this.activeEvent.durationS + (random() * 4 - 2);
+      return this.activeEvent.durationS + (random() * 6 - 3);
     }
     if (subject?.torpid) {
-      return 12 + random() * 4; // Short stay on sleeping animals
+      return 12 + random() * 4; // Short stay on sleeping animals (12-16s)
     }
-    // Dynamic normal shot: 25 to 35 seconds (fast, lively docu-pace)
-    return 25 + random() * 10;
+    // Dynamic normal shot: 30 to 45 seconds (extended documentary pacing)
+    return 30 + random() * 15;
   }
 
   update(dtS: number): void {
