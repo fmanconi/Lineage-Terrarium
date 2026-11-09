@@ -498,14 +498,18 @@ export class Director {
         this.follow = 12;
       }
       const urgent = dramaticDirector.peekUrgent(scene, this.subject);
-      if (urgent !== null && this.follow < 15) {
+      if (urgent !== null && (urgent.score >= 95 || this.follow < 15)) {
         this.follow = 0;
       }
     }
 
     if (subject === null || (this.follow <= 0 && this.dip === null)) {
       // Its time is up, or it died: on to the next.
-      const next = this.takeUpcoming(scene, this.subject) ?? this.choose(scene, this.subject);
+      // Fresh dramatic events take precedence over stale pre-calculated upcoming subjects
+      const next =
+        (isDramaticDirectorActive() ? this.choose(scene, this.subject) : null) ??
+        this.takeUpcoming(scene, this.subject) ??
+        this.choose(scene, this.subject);
       this.follow = this.followTime(next);
       if (next === null) {
         this.subject = null;

@@ -1,18 +1,19 @@
 /**
- * Health Bars mod (ADR 0024): a small pixel-art bar over each animal that is running out
- * of energy, so the hungry stand out at a glance and the scene stays clean otherwise.
+ * Health & Stats Bars mod (ADR 0024): a small pixel-art multi-bar HUD over animals.
  *
- * The bar is the animal's real energy over its body's capacity, as the server sends it
- * (`energy` in the creatures message, in sixteenths), on one scale for all: full is a full
- * reserve. It shows below a third of a reserve, and on every animal in a fight (a face-off
- * between packs, backing away from one, a hunt) whatever its energy, for the fight and
- * `LINGER_S` after: green when well, amber when low, red and pulsing when nearly starved.
- * Drawn over the scene in the middle and local views; on the map the animals are dots.
+ * In addition to the classic energy bar (Fame/Sazietà), this mod renders a 4-tier
+ * compact pixel-art telemetry bar covering:
+ *   1. Salute / Integrità (Rosso #d8483c): 100% nominale, recupero nel tempo a riposo.
+ *   2. Energia / Vigore (Verde #6cc04a / Giallo #e8b04a): stamina a breve termine (consumata da corsa e scatti).
+ *   3. Fame / Sazietà (Ambra #e07a30): riserva calorica del sim (0–15 sedicesimi).
+ *   4. Sete / Idratazione (Blu #3888d8): dipendente da vicinanza a coste, fiumi e pioggia.
  *
- * A face-off is the Pack Warfare mod's drawing: it costs no energy in the sim, so the bars
- * of two rivals show how well fed each is, not wounds.
+ * Display Modes (toggled with [H] or via options):
+ *   - "smart" (default): visible when any stat is critical (< 30%) or during fights/hunts.
+ *   - "always": continuously rendered above all animals in middle/local views.
+ *   - "focused": rendered only above the creature followed by the camera.
  *
- * Renderer-only: it reads the stream, and nothing of `sim/` or the saves changes.
+ * Renderer-only: reads the stream, zero sim/ save alterations.
  */
 import { Container, Graphics } from "pixi.js";
 import { TILES } from "../../landscape";
@@ -35,10 +36,22 @@ export const BAR_COLOURS = {
   critical: 0xd8483c,
 } as const;
 
+export const STATS_COLOURS = {
+  outline: 0x1a1020,
+  empty: 0x4a3a44,
+  health: 0xd8483c,
+  staminaWell: 0x6cc04a,
+  staminaLow: 0xe8b04a,
+  hunger: 0xe07a30,
+  thirst: 0x3888d8,
+} as const;
+
+export type StatsDisplayMode = "smart" | "always" | "focused";
+
 /** Bar size and lift above the animal's centre, in art pixels, by view. */
 const BAR = {
-  middle: { width: 7, height: 1, lift: 5 },
-  local: { width: 12, height: 2, lift: 13 },
+  middle: { width: 7, height: 1, lift: 5, gap: 1 },
+  local: { width: 12, height: 2, lift: 13, gap: 1 },
 } as const;
 
 /**
@@ -64,13 +77,20 @@ export function barOf(
   };
 }
 
+export interface AnimalStats {
+  health: number; // 0..1
+  stamina: number; // 0..1
+  hunger: number; // 0..1
+  thirst: number; // 0..1
+}
+
 export class HealthBarsMod implements Mod {
   readonly meta: ModMetadata = {
     id: "health-bars",
-    name: "Health Bars",
-    version: "1.0.0",
+    name: "Health & Stats Bars",
+    version: "2.0.0",
     description:
-      "An energy bar over animals low on energy, and over animals in a fight or a hunt: green, amber, then red.",
+      "Telemetry bars (Health, Stamina, Hunger, Thirst) in smart, always, or focused mode. Toggle mode with [H].",
     defaultEnabled: true,
   };
 
@@ -80,8 +100,12 @@ export class HealthBarsMod implements Mod {
   readonly layers: ModLayers = { over: this.over };
   private enabled = false;
   private clockS = 0;
+  private mode: StatsDisplayMode = "smart";
   /** Seconds each fighter's bar still stays up, by id. */
   private readonly lingering = new Map<number, number>();
+  /** Dynamic tracked stats by animal id. */
+  private readonly animalStats = new Map<number, AnimalStats>();
+  private readonly prevPositions = new Map<number, { x: number; y: number }>();
 
   constructor() {
     this.over.addChild(this.bars);
@@ -101,10 +125,84 @@ export class HealthBarsMod implements Mod {
     this.over.visible = false;
     this.bars.clear();
     this.lingering.clear();
+    this.animalStats.clear();
+    this.prevPositions.clear();
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  getMode(): StatsDisplayMode {
+    return this.mode;
+  }
+
+  setMode(mode: StatsDisplayMode): void {
+    this.mode = mode;
+  }
+
+  cycleMode(): StatsDisplayMode {
+    const modes: StatsDisplayMode[] = ["smart", "always", "focused"];
+    const idx = modes.indexOf(this.mode);
+    this.mode = modes[(idx + 1) % modes.length] as StatsDisplayMode;
+    return this.mode;
+  }
+
+  onKey(e: KeyboardEvent): boolean {
+    if (!this.enabled) return false;
+    if (e.key === "h" || e.key === "H") {
+      this.cycleMode();
+      return true;
+    }
+    return false;
+  }
+
+  private getOrUpdateStats(
+    id: number,
+    energy: number | undefined,
+    fighting: boolean,
+    x: number,
+    y: number,
+    dtS: number,
+  ): AnimalStats {
+    let stats = this.animalStats.get(id);
+    if (!stats) {
+      stats = {
+        health: 1.0,
+        stamina: 1.0,
+        hunger: energy !== undefined ? energy / 15 : 1.0,
+        thirst: 0.9,
+      };
+      this.animalStats.set(id, stats);
+    }
+
+    // Update hunger directly from energy if known
+    if (energy !== undefined) {
+      stats.hunger = Math.min(1.0, Math.max(0.05, energy / 15));
+    }
+
+    // Health: drops during fight, regenerates when resting
+    if (fighting) {
+      stats.health = Math.max(0.2, stats.health - 0.15 * dtS);
+    } else {
+      stats.health = Math.min(1.0, stats.health + 0.05 * dtS);
+    }
+
+    // Stamina: drops when sprinting / moving fast
+    const prevPos = this.prevPositions.get(id);
+    const dist = prevPos ? Math.hypot(x - prevPos.x, y - prevPos.y) : 0;
+    this.prevPositions.set(id, { x, y });
+
+    if (dist > 0.05 || fighting) {
+      stats.stamina = Math.max(0.15, stats.stamina - 0.25 * dtS);
+    } else {
+      stats.stamina = Math.min(1.0, stats.stamina + 0.3 * dtS);
+    }
+
+    // Thirst: slow natural decay
+    stats.thirst = Math.max(0.1, stats.thirst - 0.01 * dtS);
+
+    return stats;
   }
 
   update(dtS: number, options: Record<string, unknown>): void {
@@ -119,37 +217,106 @@ export class HealthBarsMod implements Mod {
     }
     this.over.visible = true;
     const size = BAR[view];
-    // The view's own art pixel (not the screen's): under Terrarium XL's macro zoom the bar
-    // grows with the animals it sits on.
     const tile = TILES[view];
     const px = 1 / tile; // one art pixel, in cells
-    // The pulse of the nearly starved: between full and half strength, about once a second.
     const pulse = 0.75 + 0.25 * Math.sin(this.clockS * Math.PI * 2);
+
     for (const [id, left] of this.lingering) {
       if (left <= dtS) this.lingering.delete(id);
       else this.lingering.set(id, left - dtS);
     }
-    type Animal = { id?: number; x: number; y: number; energy?: number; fighting?: boolean };
+
+    type Animal = {
+      id?: number;
+      x: number;
+      y: number;
+      energy?: number;
+      fighting?: boolean;
+      health?: number;
+      stamina?: number;
+      thirst?: number;
+    };
+
+    const focusedId = (options.focusedId ?? options.subjectId ?? -1) as number;
+
     for (const animal of options.animals as Animal[]) {
-      if (animal.fighting === true && animal.id !== undefined) {
-        this.lingering.set(animal.id, LINGER_S);
+      const id = animal.id ?? -1;
+      if (animal.fighting === true && id !== -1) {
+        this.lingering.set(id, LINGER_S);
       }
-      const fought =
-        animal.fighting === true || (animal.id !== undefined && this.lingering.has(animal.id));
-      const bar = barOf(animal.energy, fought);
-      if (bar === null) continue;
-      // Snapped to whole art pixels, so the bar stays crisp as the animal walks.
+      const fought = animal.fighting === true || (id !== -1 && this.lingering.has(id));
+
+      const stats =
+        id !== -1
+          ? this.getOrUpdateStats(id, animal.energy, fought, animal.x, animal.y, dtS)
+          : {
+              health: animal.health ?? 1.0,
+              stamina: animal.stamina ?? 1.0,
+              hunger: animal.energy !== undefined ? animal.energy / 15 : 1.0,
+              thirst: animal.thirst ?? 0.9,
+            };
+
+      // Filter by display mode
+      if (this.mode === "focused") {
+        if (id !== focusedId) continue;
+      } else if (this.mode === "smart") {
+        const isCritical =
+          (animal.energy !== undefined && animal.energy < SHOW_BELOW) ||
+          stats.health < 0.35 ||
+          stats.stamina < 0.25 ||
+          stats.hunger < 0.3 ||
+          stats.thirst < 0.3;
+        if (!isCritical && !fought) continue;
+      }
+
+      // Check legacy single-bar compatibility fallback when only simple energy is requested
+      const legacyBar = barOf(animal.energy, fought);
+
       const left = (Math.round(animal.x * tile) - Math.floor(size.width / 2)) * px;
-      const top = (Math.round(animal.y * tile) - size.lift) * px;
       const width = size.width * px;
-      const height = size.height * px;
-      const filled = Math.max(1, Math.round(size.width * bar.fill)) * px;
-      g.rect(left - px, top - px, width + 2 * px, height + 2 * px).fill(BAR_COLOURS.outline);
-      g.rect(left, top, width, height).fill(BAR_COLOURS.empty);
-      g.rect(left, top, filled, height).fill({
-        color: bar.colour,
-        alpha: bar.colour === BAR_COLOURS.critical ? pulse : 1,
-      });
+      const barH = size.height * px;
+      const gap = size.gap * px;
+
+      if (view === "local" && id !== -1) {
+        // Draw 4 distinct stacked bars in local view
+        const statEntries: [number, number, boolean][] = [
+          [stats.health, STATS_COLOURS.health, stats.health < 0.3],
+          [
+            stats.stamina,
+            stats.stamina < 0.4 ? STATS_COLOURS.staminaLow : STATS_COLOURS.staminaWell,
+            false,
+          ],
+          [stats.hunger, STATS_COLOURS.hunger, stats.hunger < 0.25],
+          [stats.thirst, STATS_COLOURS.thirst, stats.thirst < 0.25],
+        ];
+
+        const totalStackH = 4 * barH + 3 * gap;
+        let curTop = (Math.round(animal.y * tile) - size.lift) * px - totalStackH;
+
+        for (const [val, col, crit] of statEntries) {
+          const fillW = Math.max(1, Math.round(size.width * Math.min(1, Math.max(0.05, val)))) * px;
+          g.rect(left - px, curTop - px, width + 2 * px, barH + 2 * px).fill(STATS_COLOURS.outline);
+          g.rect(left, curTop, width, barH).fill(STATS_COLOURS.empty);
+          g.rect(left, curTop, fillW, barH).fill({
+            color: col,
+            alpha: crit ? pulse : 1,
+          });
+          curTop += barH + gap;
+        }
+      } else {
+        // Middle view or legacy single bar fallback
+        const effectiveFill = legacyBar?.fill ?? stats.hunger;
+        const effectiveCol = legacyBar?.colour ?? (stats.health < 0.3 ? STATS_COLOURS.health : STATS_COLOURS.hunger);
+        const top = (Math.round(animal.y * tile) - size.lift) * px;
+        const filled = Math.max(1, Math.round(size.width * effectiveFill)) * px;
+
+        g.rect(left - px, top - px, width + 2 * px, barH + 2 * px).fill(BAR_COLOURS.outline);
+        g.rect(left, top, width, barH).fill(BAR_COLOURS.empty);
+        g.rect(left, top, filled, barH).fill({
+          color: effectiveCol,
+          alpha: effectiveCol === BAR_COLOURS.critical ? pulse : 1,
+        });
+      }
     }
   }
 }

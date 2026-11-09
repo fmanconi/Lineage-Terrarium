@@ -47,6 +47,13 @@ export interface Footprint {
   side: -1 | 1; // Left or right step
 }
 
+export interface GrazingMark {
+  x: number;
+  y: number;
+  ageS: number;
+  maxAgeS: number;
+}
+
 let trailsActive = false;
 
 export function isTrailsActive(): boolean {
@@ -63,13 +70,25 @@ export class TrailSystem {
   width = TRAIL_GRID_SIZE;
   height = TRAIL_GRID_SIZE;
   private readonly footprints: Footprint[] = [];
+  private readonly grazingMarks: GrazingMark[] = [];
   private lastPositions = new Map<number, { x: number; y: number; stepCount: number }>();
   private nextFootprintId = 1;
 
   reset(): void {
     this.wear.fill(0);
     this.footprints.length = 0;
+    this.grazingMarks.length = 0;
     this.lastPositions.clear();
+  }
+
+  addGrazingMark(x: number, y: number, maxAgeS = 180): void {
+    if (!trailsActive) return;
+    this.grazingMarks.push({ x, y, ageS: 0, maxAgeS });
+    if (this.grazingMarks.length > 128) this.grazingMarks.shift();
+  }
+
+  getGrazingMarks(): readonly GrazingMark[] {
+    return this.grazingMarks;
   }
 
   /** Fit the wear grid to a world of `width` × `height` cells (a new world starts unworn). */
@@ -85,12 +104,15 @@ export class TrailSystem {
    * Observe animal positions for the current frame, spawning footprints and recording wear.
    */
   observe(
-    animals: readonly { id: number; x: number; y: number; heading?: number }[],
+    animals: readonly { id: number; x: number; y: number; heading?: number; grazing?: boolean }[],
     onLand?: (x: number, y: number) => boolean,
   ): void {
     if (!trailsActive) return;
 
     for (const animal of animals) {
+      if (animal.grazing) {
+        this.addGrazingMark(animal.x, animal.y);
+      }
       const prev = this.lastPositions.get(animal.id);
       if (!prev) {
         this.lastPositions.set(animal.id, { x: animal.x, y: animal.y, stepCount: 0 });
@@ -196,7 +218,18 @@ export class TrailSystem {
     this.footprints.length = 0;
     this.footprints.push(...kept);
 
-    // 2. Wear decay
+    // 2. Grazing mark aging
+    const keptGrazing: GrazingMark[] = [];
+    for (const gm of this.grazingMarks) {
+      gm.ageS += dtS;
+      if (gm.ageS < gm.maxAgeS) {
+        keptGrazing.push(gm);
+      }
+    }
+    this.grazingMarks.length = 0;
+    this.grazingMarks.push(...keptGrazing);
+
+    // 3. Wear decay
     // Base natural soil recovery: 0.01 per second (~15 mins to heal a heavy trail)
     // Rain wash: up to 0.08 additional per second during heavy storms
     const decayRate = (0.01 + Math.max(0, rain) * 0.08) * dtS;
@@ -215,20 +248,21 @@ export class FootprintsTrailsMod implements Mod {
   readonly meta: ModMetadata = {
     id: "footprints-trails",
     name: "Footprints and Trails",
-    version: "1.0.0",
-    description: "Animals leave footprints, and routes they use often wear into paths.",
+    version: "1.1.0",
+    description: "Animals leave footprints, routes wear into game trails, and grazing marks crop pasture.",
     defaultEnabled: true,
   };
 
   /** On the ground, in cells: the beaten paths under the footprints. */
   private readonly ground = new Container();
   private readonly paths = new Graphics();
+  private readonly grazings = new Graphics();
   private readonly prints = new Graphics();
   readonly layers: ModLayers = { ground: this.ground };
   private sincePathsS = Infinity;
 
   constructor() {
-    this.ground.addChild(this.paths, this.prints);
+    this.ground.addChild(this.paths, this.grazings, this.prints);
     this.ground.visible = false;
   }
 
@@ -246,6 +280,7 @@ export class FootprintsTrailsMod implements Mod {
     trailSystem.reset();
     this.ground.visible = false;
     this.paths.clear();
+    this.grazings.clear();
     this.prints.clear();
   }
 
@@ -268,7 +303,7 @@ export class FootprintsTrailsMod implements Mod {
           : (x: number, y: number): boolean =>
               (land.heights[Math.floor(y) * land.width + Math.floor(x)] ?? 0) > land.seaLevel;
       trailSystem.observe(
-        options.animals as { id: number; x: number; y: number; heading?: number }[],
+        options.animals as { id: number; x: number; y: number; heading?: number; grazing?: boolean }[],
         onLand,
       );
     }
@@ -280,8 +315,22 @@ export class FootprintsTrailsMod implements Mod {
       this.sincePathsS = 0;
       this.drawPaths();
     }
+    this.drawGrazings(options.view === "map" ? 0 : tile);
     // The prints are too small to see on the map
     this.drawPrints(options.view === "map" ? 0 : tile);
+  }
+
+  private drawGrazings(tile: number): void {
+    const g = this.grazings;
+    g.clear();
+    if (tile <= 0) return;
+    for (const gm of trailSystem.getGrazingMarks()) {
+      const fade = 1 - gm.ageS / gm.maxAgeS;
+      if (fade <= 0) continue;
+      const x = Math.floor(gm.x);
+      const y = Math.floor(gm.y);
+      g.rect(x + 0.15, y + 0.15, 0.7, 0.7).fill({ color: 0x8da846, alpha: 0.35 * fade });
+    }
   }
 
   /** The worn cells, in three steps of bare soil as the wear deepens. */

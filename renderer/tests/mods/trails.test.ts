@@ -74,6 +74,13 @@ describe("Footprints and Trails Mod", () => {
     expect(trailSystem.getWear(0, 5)).toBe(0);
   });
 
+  it("spawns grazing marks when animals graze", () => {
+    setTrailsActive(true);
+    trailSystem.observe([{ id: 1, x: 15, y: 15, grazing: true }]);
+    expect(trailSystem.getGrazingMarks().length).toBe(1);
+    expect(trailSystem.getGrazingMarks()[0]?.x).toBe(15);
+  });
+
   it("fits the wear grid to the world's size", () => {
     expect(trailSystem.width).toBe(TRAIL_GRID_SIZE);
     trailSystem.resize(256, 150);

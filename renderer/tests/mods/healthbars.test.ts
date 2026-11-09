@@ -75,4 +75,25 @@ describe("Health Bars mod", () => {
     mod.disable();
     expect(over?.visible).toBe(false);
   });
+
+  it("cycles display modes between smart, always, and focused with [H]", () => {
+    const mod = new HealthBarsMod();
+    mod.enable();
+    expect(mod.getMode()).toBe("smart");
+    expect(mod.onKey?.({ key: "h" } as unknown as KeyboardEvent)).toBe(true);
+    expect(mod.getMode()).toBe("always");
+    expect(mod.onKey?.({ key: "H" } as unknown as KeyboardEvent)).toBe(true);
+    expect(mod.getMode()).toBe("focused");
+    expect(mod.onKey?.({ key: "h" } as unknown as KeyboardEvent)).toBe(true);
+    expect(mod.getMode()).toBe("smart");
+
+    // In focused mode, draws only for the followed animal
+    mod.setMode("focused");
+    const animals = [
+      { id: 1, x: 5, y: 5, energy: 2 },
+      { id: 2, x: 8, y: 8, energy: 2 },
+    ];
+    mod.update(0.016, { view: "local", animals, focusedId: 1 });
+    expect(mod.layers.over?.visible).toBe(true);
+  });
 });

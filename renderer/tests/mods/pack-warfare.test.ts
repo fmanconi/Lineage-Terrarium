@@ -290,4 +290,38 @@ describe("territorial warfare", () => {
     updatePackDynamics(all, STARE_S, { free });
     expect(rival.motion.mode).toBe("pause");
   });
+
+  it("triggers intra-species alpha duel between large adults near nest", () => {
+    // 4 members make a nest at (10.5, 10.5)
+    const a1 = animal(5, 10, 10);
+    const a2 = animal(5, 11, 10);
+    const a3 = animal(5, 10, 11);
+    const a4 = animal(5, 11, 11);
+    // Give a1 and a2 large adult size for alpha contention
+    a1.plan.length = 1.5;
+    a2.plan.length = 1.3;
+    const skirmish = vi.fn();
+    updatePackDynamics([a1, a2, a3, a4], 0.2, { skirmish });
+
+    // Stare phase begins with sparks
+    expect(skirmish).toHaveBeenCalled();
+    expect(a1.motion.mode).toBe("pause");
+    expect(a2.motion.mode).toBe("pause");
+    expect(a1.pack.stare).toBeGreaterThan(0);
+    expect(a2.pack.retreats).toBe(true); // a2 has smaller length (1.3 < 1.5), loses
+  });
+
+  it("wakes paused member when multiple pack mates are strolling", () => {
+    const sleeper = animal(1, 10, 10);
+    const walker1 = animal(1, 11, 10);
+    const walker2 = animal(1, 10, 11);
+    walker1.motion.mode = "stroll";
+    walker1.motion.goal = { x: 12, y: 10 };
+    walker2.motion.mode = "stroll";
+    walker2.motion.goal = { x: 11, y: 11 };
+
+    updatePackDynamics([sleeper, walker1, walker2], 0.2);
+    expect(sleeper.motion.mode).toBe("stroll");
+    expect(withinLeash(sleeper)).toBe(true);
+  });
 });
