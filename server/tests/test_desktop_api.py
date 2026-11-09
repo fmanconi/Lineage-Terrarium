@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from lineage_server.desktop import DesktopApi, with_day_length
@@ -139,15 +140,17 @@ def test_pip_closed_from_outside_brings_the_game_back() -> None:
 
 def test_pip_resize_keeps_the_ratio_and_the_opposite_corner() -> None:
     from lineage_server.desktop import EDGE_LEFT, EDGE_TOP
-    from webview.window import FixPoint
+
+    # pywebview is the desktop app's own, installed on Windows only, not in the lockfile.
+    fix_point: Any = pytest.importorskip("webview.window").FixPoint
 
     api = DesktopApi()
     pip = FakeMiniature()
     api._pip = pip
     assert api.pip_resize(600, 1, EDGE_LEFT | EDGE_TOP) == {"width": 600, "height": 352}
-    assert pip.resized[-1] == (600, 352, FixPoint.EAST | FixPoint.SOUTH)
+    assert pip.resized[-1] == (600, 352, fix_point.EAST | fix_point.SOUTH)
     assert api.pip_resize(10, 10, 0)["width"] == 240
-    assert pip.resized[-1][2] == FixPoint.WEST | FixPoint.NORTH
+    assert pip.resized[-1][2] == fix_point.WEST | fix_point.NORTH
 
 
 def test_prefs_are_kept_on_disk_for_the_game_keys_only(tmp_path) -> None:  # type: ignore[no-untyped-def]

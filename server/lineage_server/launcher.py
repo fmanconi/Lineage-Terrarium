@@ -394,7 +394,7 @@ def main(argv: list[str] | None = None) -> None:
     webview: Any = None
     if not args.browser:
         try:
-            import webview  # Optional: without it the page opens in the browser.
+            import webview  # pyright: ignore[reportMissingImports] - Optional: without it the page opens in the browser.
         except ImportError:
             log.info("pywebview is not installed: opening the launcher in the browser")
     if webview is None:

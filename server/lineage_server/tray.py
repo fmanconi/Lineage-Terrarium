@@ -243,7 +243,7 @@ def ask_close_action(
 def _pystray_factory(
     name: str, icon: Image.Image, title: str, menu: tuple[tuple[str, Callable[[], None], bool], ...]
 ) -> Any:
-    import pystray
+    import pystray  # pyright: ignore[reportMissingImports]
 
     items = [
         pystray.MenuItem(text, lambda _icon, _item, act=act: act(), default=default)

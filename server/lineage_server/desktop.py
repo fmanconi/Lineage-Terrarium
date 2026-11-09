@@ -165,7 +165,7 @@ def _work_area(window: Any = None) -> tuple[int, int, int, int]:
     are placed in logical pixels: measured on a 2560 x 1600 screen at 150% (08/11/2026). So
     when the screen says 1 but the game window's form has a larger scale, divide by it.
     """
-    import webview
+    import webview  # pyright: ignore[reportMissingImports]
 
     screens = webview.screens
     screen = next((s for s in screens if s.x == 0 and s.y == 0), screens[0] if screens else None)
@@ -179,7 +179,7 @@ def _work_area(window: Any = None) -> tuple[int, int, int, int]:
     divisor = 1.0
     if window is not None and abs(float(screen.scale) - 1.0) < 0.01:
         with suppress(Exception):
-            from webview.platforms.winforms import BrowserView
+            from webview.platforms.winforms import BrowserView  # pyright: ignore
 
             form = BrowserView.instances.get(window.uid)
             if form is not None:
@@ -192,7 +192,7 @@ def _round_corners(window: Any) -> None:
     try:
         import ctypes
 
-        from webview.platforms.winforms import BrowserView
+        from webview.platforms.winforms import BrowserView  # pyright: ignore[reportMissingImports]
 
         form = BrowserView.instances.get(window.uid)
         if form is None:
@@ -246,7 +246,7 @@ def _apply_window_decorations(window: Any) -> None:
     if window is None:
         return
     try:
-        from webview.platforms.winforms import BrowserView
+        from webview.platforms.winforms import BrowserView  # pyright: ignore[reportMissingImports]
 
         form = BrowserView.instances.get(window.uid)
         if form is not None:
@@ -325,7 +325,7 @@ class DesktopApi:
                 return True
             if self._window is None or self._pip_url is None:
                 return False
-            import webview
+            import webview  # pyright: ignore[reportMissingImports]
 
             x, y, width, height = pip_geometry(
                 _work_area(self._window), _load_pip_state(self._pip_state)
@@ -387,7 +387,7 @@ class DesktopApi:
         h = pip_height(w)
         if pip is None:
             return {"width": w, "height": h}
-        from webview.window import FixPoint
+        from webview.window import FixPoint  # pyright: ignore[reportMissingImports]
 
         fix = FixPoint.EAST if edges & EDGE_LEFT else FixPoint.WEST
         fix |= FixPoint.SOUTH if edges & EDGE_TOP else FixPoint.NORTH
@@ -662,7 +662,7 @@ def _run_desktop(args: argparse.Namespace) -> None:
         return
 
     try:
-        import webview  # Lazy import so headless Linux servers never need pywebview
+        import webview  # pyright: ignore[reportMissingImports] - Lazy import so headless Linux servers never need pywebview
     except ImportError:
         import webbrowser
 
