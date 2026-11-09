@@ -62,8 +62,8 @@ _ICON_ROWS = (
     "................................",
     "................................",
     "...........oooooooooo...........",
-    "...........occccccccо...........",
-    "...........occccccccо...........",
+    "...........occcccccco...........",
+    "...........occcccccco...........",
     "..........oooooooooooo..........",
     "........ooggggggggggggoo........",
     ".......oghaaaaaaaaaaaaago.......",
@@ -95,8 +95,8 @@ _ICON_ROWS = (
 
 
 def _icon_rows() -> list[str]:
-    """The icon's rows, normalised so a stray look-alike glyph cannot slip in."""
-    return [row.replace("о", "o") for row in _ICON_ROWS]
+    """The icon's rows as a list."""
+    return list(_ICON_ROWS)
 
 
 def create_tray_icon_image(size: int = ICON_SIZE) -> Image.Image:

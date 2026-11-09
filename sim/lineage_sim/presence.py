@@ -72,9 +72,7 @@ PISA_LATITUDE = 43.7228
 PISA_LONGITUDE = 10.4017
 
 
-def solar_elevation(
-    unix_ms: int, lat: float = PISA_LATITUDE, lon: float = PISA_LONGITUDE
-) -> float:
+def solar_elevation(unix_ms: int, lat: float = PISA_LATITUDE, lon: float = PISA_LONGITUDE) -> float:
     """Astronomical solar elevation in degrees above horizon for given UTC unix_ms."""
     utc_dt = dt.datetime(1970, 1, 1, tzinfo=dt.UTC) + dt.timedelta(milliseconds=unix_ms)
     day_of_year = utc_dt.timetuple().tm_yday

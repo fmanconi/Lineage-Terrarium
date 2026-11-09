@@ -12,6 +12,11 @@ import {
 } from "../../src/mods/builtin/formicarium";
 import { memoryStorage } from "../../src/mods/registry";
 
+function defined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("expected a value");
+  return value;
+}
+
 const key = (k: string): KeyboardEvent => ({ key: k }) as KeyboardEvent;
 
 describe("Ant Colonies", () => {
@@ -101,9 +106,9 @@ describe("Ant Colonies", () => {
     grid.depositFood(32, 28, w, h, 0.9);
 
     const sensed = grid.senseFoodHeading(32, 30, -Math.PI / 2, w, h);
-    expect(sensed).not.toBeNull();
+    if (sensed === null) throw new Error("no food heading sensed");
     // Angle should point approximately north
-    expect(sensed!).toBeCloseTo(-Math.PI / 2, 1);
+    expect(sensed).toBeCloseTo(-Math.PI / 2, 1);
   });
 
   it("initializes 3 distinct colonies with populations", () => {
@@ -146,7 +151,7 @@ describe("Ant Colonies", () => {
 
   it("triggers alarm when large creature steps near a mound", () => {
     const system = new FormicariumSystem();
-    const red = system.colonies[0]!;
+    const red = defined(system.colonies[0]);
     expect(red.alarmLevel).toBe(0);
 
     // Intruding creature at mound location
@@ -156,8 +161,8 @@ describe("Ant Colonies", () => {
 
   it("advances ant simulation, returns payload and stores food in nest", () => {
     const system = new FormicariumSystem();
-    const red = system.colonies[0]!;
-    const ant = red.ants[0]!;
+    const red = defined(system.colonies[0]);
+    const ant = defined(red.ants[0]);
 
     // Set ant to returning with food payload near mound
     ant.state = "returning";

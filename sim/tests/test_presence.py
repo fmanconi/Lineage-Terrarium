@@ -460,4 +460,3 @@ def test_presence_alternating_uniform_cycle(config: Config) -> None:
     world.step(120 * 3600)
     copy.step(120 * 3600)
     assert world.state_hash() == copy.state_hash()
-

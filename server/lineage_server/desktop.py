@@ -189,7 +189,7 @@ def _set_form_prop(form: Any, prop: str, value: Any) -> None:
     if form is None:
         return
     try:
-        from System import Action
+        from System import Action  # pyright: ignore[reportMissingImports]
 
         if getattr(form, "InvokeRequired", False):
             form.Invoke(Action(lambda: setattr(form, prop, value)))
@@ -209,7 +209,7 @@ def _apply_native_form_decorations(form: Any) -> None:
     ico_path = REPO_ROOT / "lineage.ico"
     if ico_path.is_file():
         try:
-            import System.Drawing
+            import System.Drawing  # pyright: ignore[reportMissingImports]
 
             icon = System.Drawing.Icon(str(ico_path))
             _set_form_prop(form, "Icon", icon)
@@ -321,6 +321,8 @@ class DesktopApi:
                 background_color="#10081c",
                 js_api=self,
             )
+            if pip is None:
+                return False
             self._pip = pip
 
         def on_shown() -> None:
@@ -667,6 +669,8 @@ def _run_desktop(args: argparse.Namespace) -> None:
         background_color="#10081c",
         js_api=api,
     )
+    if window is None:
+        raise RuntimeError("pywebview could not create the game window")
     api._window = window
 
     from lineage_server.tray import TrayController, ask_close_action

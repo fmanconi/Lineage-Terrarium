@@ -5,21 +5,17 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-from PIL import Image
-
 from lineage_server.tray import (
     CLOSE_ACTIONS,
-    DIALOG_TEXT,
-    DIALOG_TITLE,
+    EXIT_LABEL,
     ICON_SIZE,
     SHOW_LABEL,
-    EXIT_LABEL,
     CloseAction,
     TrayController,
     ask_close_action,
     create_tray_icon_image,
 )
+from PIL import Image
 
 
 def test_tray_icon_image_is_crisp_rgba() -> None:
