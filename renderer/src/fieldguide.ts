@@ -970,7 +970,7 @@ function paintIslandSpread(
   h.text(`Weather: ${rainName}${fireNote}`, RIGHT_X0, 68, WORD_INK);
   h.text(
     timeScale > 1
-      ? `Pace: ${Math.round(timeScale)}x fast insect life (50-70m sun)`
+      ? `Pace: ${Math.round(timeScale)}x simulated life`
       : "Clock: 1:1 with real calendar",
     RIGHT_X0,
     80,

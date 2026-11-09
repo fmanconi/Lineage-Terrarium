@@ -170,6 +170,41 @@
         border-color: var(--gold);
         background: #4a2c1c;
       }
+      .pace-options {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .pace-options[hidden] {
+        display: none;
+      }
+      .pace-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        padding: 4px 10px;
+        border: var(--px) solid #2b1810;
+        background: #2b1810;
+        color: var(--parchment);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chip[aria-pressed="true"] {
+        border-color: var(--gold);
+        background: #4a2c1c;
+      }
+      #pace-note {
+        color: var(--sand);
+        font-size: 12px;
+        margin: 0;
+      }
       .mod .desc {
         grid-column: 1 / -1;
         color: var(--sand);
@@ -273,7 +308,7 @@
       <canvas id="island" width="32" height="16" aria-hidden="true"></canvas>
       <div>
         <h1>LINEAGE</h1>
-        <p>An island that evolves on its own. Pick a world, a pace, and go.</p>
+        <p>An island that evolves on its own. Pick a world, its time, and go.</p>
       </div>
     </header>
 
@@ -284,8 +319,15 @@
       </section>
       <div class="column">
         <section class="panel" aria-labelledby="mode-title">
-          <h2 id="mode-title">Pace</h2>
+          <h2 id="mode-title">Time</h2>
           <div class="modes" id="modes"></div>
+          <div class="pace-options" id="pace-options" hidden>
+            <span class="pace-label">Speed</span>
+            <div class="chips" id="speeds"></div>
+            <span class="pace-label">One day and night lasts</span>
+            <div class="chips" id="days"></div>
+          </div>
+          <p id="pace-note"></p>
         </section>
         <section class="panel column" style="grid-template-rows: auto auto 1fr" aria-labelledby="mods-title">
           <h2 id="mods-title">Mods</h2>
@@ -304,8 +346,8 @@
     <script>
       "use strict";
       const MODE_NOTES = {
-        fast: "1 real hour ≈ 3.75 island days",
-        realtime: "The island lives at your pace",
+        fast: "Faster than life, its own days",
+        realtime: "x1, under the real sun",
       };
       const STORE_KEY = "lineage_launcher_v1";
       const saved = (() => {
@@ -315,7 +357,13 @@
           return {};
         }
       })();
-      const state = { world: saved.world ?? null, mode: saved.mode ?? "fast" };
+      const state = {
+        world: saved.world ?? null,
+        mode: saved.mode ?? "fast",
+        speed: saved.speed ?? 90,
+        dayMinutes: saved.dayMinutes ?? 60,
+      };
+      let modeList = [];
       const $ = (id) => document.getElementById(id);
       $("fullscreen").checked = saved.fullscreen === true;
 
@@ -412,7 +460,50 @@
         updateLaunch();
       }
 
+      function chips(box, values, current, text, pick) {
+        box.replaceChildren();
+        for (const value of values) {
+          const chip = el(
+            "button",
+            { class: "chip", type: "button", "aria-pressed": String(value === current) },
+            text(value),
+          );
+          chip.addEventListener("click", () => {
+            pick(value);
+            remember();
+            renderPace();
+          });
+          box.append(chip);
+        }
+      }
+
+      // The simulated mode's speed and day length; a note on what they mean in real time.
+      function renderPace() {
+        const mode = modeList.find((m) => m.id === state.mode);
+        const options = mode?.speeds?.length > 0;
+        $("pace-options").hidden = !options;
+        if (!options) {
+          $("pace-note").textContent = "1 real day = 1 island day. Dawn and dusk follow the sky over Pisa.";
+          return;
+        }
+        if (!mode.speeds.includes(state.speed)) state.speed = mode.time_scale;
+        if (!mode.day_minutes.includes(state.dayMinutes)) state.dayMinutes = mode.default_day_minutes;
+        chips($("speeds"), mode.speeds, state.speed, (s) => `x${s}`, (s) => (state.speed = s));
+        chips(
+          $("days"),
+          mode.day_minutes,
+          state.dayMinutes,
+          (m) => (m < 60 ? `${m} min` : `${m / 60} h`),
+          (m) => (state.dayMinutes = m),
+        );
+        const days = state.speed / 24;
+        const perHour = days >= 10 ? Math.round(days) : days.toFixed(days < 1 ? 2 : 1);
+        $("pace-note").textContent =
+          `1 real hour = ${perHour} island days of life. Sun up and down: ~${state.dayMinutes} min.`;
+      }
+
       function renderModes(modes) {
+        modeList = modes;
         const box = $("modes");
         box.replaceChildren();
         if (!modes.some((m) => m.id === state.mode)) state.mode = modes[0]?.id ?? "fast";
@@ -428,9 +519,11 @@
             remember();
             for (const other of box.children) other.setAttribute("aria-pressed", "false");
             button.setAttribute("aria-pressed", "true");
+            renderPace();
           });
           box.append(button);
         }
+        renderPace();
       }
 
       function renderMods(mods) {
@@ -477,7 +570,15 @@
         $("launch").disabled = true;
         status(`Waking ${state.world}…`);
         try {
-          const result = await call("launch", state.world, state.mode, $("fullscreen").checked);
+          const simulated = state.mode === "fast";
+          const result = await call(
+            "launch",
+            state.world,
+            state.mode,
+            $("fullscreen").checked,
+            simulated ? state.speed : null,
+            simulated ? state.dayMinutes : null,
+          );
           if (!result.ok) throw new Error(result.error);
           remember();
           status(`${state.world} is waking up. This window closes on its own.`);

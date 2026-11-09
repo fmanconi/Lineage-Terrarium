@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from lineage_server.desktop import DesktopApi
+from pathlib import Path
+
+import pytest
+from lineage_server.desktop import DesktopApi, with_day_length
+from lineage_server.main import FAST_LIFE_CONFIG
+from lineage_sim.config import parse_config
+
+TERRARIUM_CONFIG = Path(__file__).resolve().parents[2] / "sim" / "config" / "terrarium.toml"
 
 
 class FakeWindow:
@@ -166,3 +173,25 @@ def test_prefs_survive_a_broken_file(tmp_path) -> None:  # type: ignore[no-untyp
     assert api.prefs_get() == {}
     assert api.prefs_set("lineage_x", "1") is True
     assert api.prefs_get() == {"lineage_x": "1"}
+
+
+def test_day_length_turns_real_minutes_into_sim_hours() -> None:
+    config = parse_config(FAST_LIFE_CONFIG.read_text(encoding="utf-8"))
+    # The config's own cycle: 60 +- 10 real minutes at x90.
+    same = with_day_length(config, 60, 90).presence
+    assert (same.cycle_min_hours, same.cycle_max_hours) == pytest.approx((75.0, 105.0))
+    short = with_day_length(config, 20, 360).presence  # 20 min at x360: 120 sim-hours
+    assert (short.cycle_min_hours, short.cycle_max_hours) == pytest.approx((100.0, 140.0))
+    assert with_day_length(config, 60, 90).fauna == config.fauna
+
+
+def test_day_length_leaves_the_real_sun_alone() -> None:
+    config = parse_config(TERRARIUM_CONFIG.read_text(encoding="utf-8"))
+    assert with_day_length(config, 20, 1) is config
+
+
+def test_day_length_refuses_nonsense() -> None:
+    config = parse_config(FAST_LIFE_CONFIG.read_text(encoding="utf-8"))
+    for minutes, scale in ((0, 90), (-5, 90), (60, 0)):
+        with pytest.raises(ValueError, match="must be positive"):
+            with_day_length(config, minutes, scale)

@@ -59,6 +59,29 @@ PIP_STATE_FILE = "pip-window.json"
 # which is lost whenever the port changes (renderer/src/prefs.ts). One file for every launch
 # of the desktop app, whatever its world.
 DEFAULT_PREFS = REPO_ROOT / "data" / "desktop-prefs.json"
+
+# A simulated day and night lasts its chosen length give or take a sixth, drawn anew each
+# cycle: fast_life.toml's 75-105 sim-hours at x90 are 60 +- 10 real minutes.
+DAY_SPREAD = 1 / 6
+
+
+def with_day_length(config: Config, day_minutes: float, time_scale: float) -> Config:
+    """``config`` with its alternating day and night lasting ``day_minutes`` of wall-clock
+    time at ``time_scale``; unchanged when its light does not alternate (live, real sun)."""
+    if day_minutes <= 0 or time_scale <= 0:
+        raise ValueError("day_minutes and time_scale must be positive")
+    if not config.presence.alternating_cycle:
+        log.warning("--day-minutes ignored: this config's light does not alternate")
+        return config
+    sim_hours = day_minutes / 60 * time_scale
+    presence = replace(
+        config.presence,
+        cycle_min_hours=sim_hours * (1 - DAY_SPREAD),
+        cycle_max_hours=sim_hours * (1 + DAY_SPREAD),
+    )
+    return replace(config, presence=presence)
+
+
 PREFS_PREFIX = "lineage_"
 PREFS_VALUE_MAX = 64_000
 
@@ -532,6 +555,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
     parser.add_argument("--config", type=Path, default=FAST_LIFE_CONFIG)
     parser.add_argument("--time-scale", type=float, default=FAST_LIFE_TIME_SCALE)
+    parser.add_argument(
+        "--day-minutes",
+        type=float,
+        default=None,
+        help="real minutes of one simulated day and night (default: the config's)",
+    )
     parser.add_argument("--years-ahead", type=int, default=400)
     parser.add_argument("--mods", type=Path, default=DEFAULT_MODS, help="mods/README.md")
     parser.add_argument("--fullscreen", action="store_true", help="open directly in fullscreen")
@@ -580,6 +609,8 @@ def _run_desktop(args: argparse.Namespace) -> None:
         raise SystemExit(f"Missing renderer build at {args.dist} (run npm run build:kiosk)")
 
     config = parse_config(args.config.read_text(encoding="utf-8"))
+    if args.day_minutes is not None:
+        config = with_day_length(config, args.day_minutes, args.time_scale)
     bootstrap_fast_world(args.data, config, years_ahead=args.years_ahead)
 
     server, shutdown, _ = start_embedded_server(

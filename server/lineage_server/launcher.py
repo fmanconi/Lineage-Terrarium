@@ -1,7 +1,8 @@
 """Lineage's launcher: the desktop app's front door.
 
-A small pixel-art window (``assets/launcher.html``) to pick a world under ``data/``, the
-island's pace (fast-life x90 or true real time x1), which user mods are on (``mods/``,
+A small pixel-art window (``assets/launcher.html``) to pick a world under ``data/``, how its
+time runs (live: x1 under the real sun; simulated: a speed from x10 to x360 and a day and
+night of 20 minutes to 2 hours of wall clock), which user mods are on (``mods/``,
 ``mods/README.md``) and whether to open full screen; its Launch button starts the game
 (``lineage_server.desktop``) as a process of its own and closes the launcher.
 
@@ -62,9 +63,14 @@ class Mode:
 
 
 MODES: dict[str, Mode] = {
-    "fast": Mode("⚡ Fast-Life (x90)", FAST_LIFE_CONFIG, FAST_LIFE_TIME_SCALE),
-    "realtime": Mode("🌿 True Real-Time (x1)", TERRARIUM_CONFIG, 1.0),
+    "fast": Mode("⚡ Simulated", FAST_LIFE_CONFIG, FAST_LIFE_TIME_SCALE),
+    "realtime": Mode("🌿 Live", TERRARIUM_CONFIG, 1.0),
 }
+# The simulated island's choices: how fast it runs (sim seconds per real second) and how
+# long one day and night last on the wall clock. Live is x1 under the real sun of Pisa.
+SPEEDS: tuple[float, ...] = (10.0, 30.0, 90.0, 180.0, 360.0)
+DAY_MINUTES: tuple[float, ...] = (20.0, 60.0, 120.0)
+DEFAULT_DAY_MINUTES = 60.0
 
 Spawn = Callable[[Sequence[str]], int]
 
@@ -179,18 +185,45 @@ class LauncherApi:
     # --- Launching ------------------------------------------------------------------------
 
     def modes(self) -> list[dict[str, Any]]:
+        """The two ways time runs; the simulated one lists its speeds and day lengths."""
         return [
-            {"id": key, "label": mode.label, "time_scale": mode.time_scale}
+            {
+                "id": key,
+                "label": mode.label,
+                "time_scale": mode.time_scale,
+                "speeds": list(SPEEDS) if key == "fast" else [],
+                "day_minutes": list(DAY_MINUTES) if key == "fast" else [],
+                "default_day_minutes": DEFAULT_DAY_MINUTES if key == "fast" else None,
+            }
             for key, mode in MODES.items()
         ]
 
-    def command(self, world_name: str, mode: str, fullscreen: bool) -> list[str]:
-        """The desktop app's command line for a world, a pace and a window."""
+    def command(
+        self,
+        world_name: str,
+        mode: str,
+        fullscreen: bool,
+        speed: float | None = None,
+        day_minutes: float | None = None,
+    ) -> list[str]:
+        """The desktop app's command line for a world, a pace and a window. ``speed`` and
+        ``day_minutes`` apply to the simulated mode only (None: its defaults)."""
         if not isinstance(world_name, str) or not WORLD_NAME.fullmatch(world_name):
             raise ValueError(f"not a world name: {world_name!r}")
         if mode not in MODES:
             raise ValueError(f"not a mode: {mode!r}")
         chosen = MODES[mode]
+        time_scale = chosen.time_scale
+        pace: list[str] = []
+        if mode == "fast":
+            if speed is not None:
+                if not isinstance(speed, int | float) or float(speed) not in SPEEDS:
+                    raise ValueError(f"not a speed: {speed!r}")
+                time_scale = float(speed)
+            minutes = DEFAULT_DAY_MINUTES if day_minutes is None else day_minutes
+            if not isinstance(minutes, int | float) or float(minutes) not in DAY_MINUTES:
+                raise ValueError(f"not a day length: {day_minutes!r}")
+            pace = ["--day-minutes", repr(float(minutes))]
         folder = self._data / world_name
         command = [
             sys.executable,
@@ -201,7 +234,8 @@ class LauncherApi:
             "--config",
             str(chosen.config),
             "--time-scale",
-            repr(chosen.time_scale),
+            repr(time_scale),
+            *pace,
             "--years-ahead",
             str(self._years_ahead(folder)),
             "--mods",
@@ -213,10 +247,17 @@ class LauncherApi:
             command.append("--fullscreen")
         return command
 
-    def launch(self, world_name: str, mode: str, fullscreen: bool = False) -> dict[str, Any]:
+    def launch(
+        self,
+        world_name: str,
+        mode: str,
+        fullscreen: bool = False,
+        speed: float | None = None,
+        day_minutes: float | None = None,
+    ) -> dict[str, Any]:
         """Start the game on ``world_name`` and close the launcher."""
         try:
-            command = self.command(world_name, mode, bool(fullscreen))
+            command = self.command(world_name, mode, bool(fullscreen), speed, day_minutes)
         except ValueError as error:
             return {"ok": False, "error": str(error)}
         log.info("launching %s", command)
@@ -365,8 +406,8 @@ def main(argv: list[str] | None = None) -> None:
         html=page.decode("utf-8"),
         js_api=api,
         width=900,
-        height=640,
-        min_size=(720, 520),
+        height=760,
+        min_size=(720, 600),
         background_color="#10081c",
     )
     webview.start(debug=False)

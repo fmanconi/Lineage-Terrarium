@@ -15,8 +15,11 @@ from typing import Any
 
 import pytest
 from lineage_server.launcher import (
+    DAY_MINUTES,
+    DEFAULT_DAY_MINUTES,
     LAUNCHER_PAGE,
     MODES,
+    SPEEDS,
     TOKEN_HEADER,
     LauncherApi,
     bridge_server,
@@ -129,6 +132,46 @@ def test_launch_windowed_and_on_a_new_world(tmp_path: Path) -> None:
     (command,) = spawned.commands
     assert "--fullscreen" not in command
     assert command[command.index("--years-ahead") + 1] == "400"
+
+
+def test_simulated_time_takes_the_chosen_speed_and_day_length(tmp_path: Path) -> None:
+    spawned = Spawned()
+    api = _api(tmp_path, spawned)
+    assert api.launch("island", "fast", False, 360, 20)["ok"] is True
+    (command,) = spawned.commands
+    assert float(command[command.index("--time-scale") + 1]) == 360.0
+    assert float(command[command.index("--day-minutes") + 1]) == 20.0
+
+
+def test_simulated_time_defaults_and_live_time_ignores_the_pace(tmp_path: Path) -> None:
+    spawned = Spawned()
+    api = _api(tmp_path, spawned)
+    api.launch("island", "fast", False)
+    api.launch("island", "realtime", False, 360, 20)
+    simulated, live = spawned.commands
+    assert float(simulated[simulated.index("--time-scale") + 1]) == MODES["fast"].time_scale
+    assert float(simulated[simulated.index("--day-minutes") + 1]) == DEFAULT_DAY_MINUTES
+    assert float(live[live.index("--time-scale") + 1]) == 1.0
+    assert "--day-minutes" not in live
+
+
+def test_the_modes_offer_speeds_and_day_lengths_to_the_simulated_one(tmp_path: Path) -> None:
+    modes = {m["id"]: m for m in _api(tmp_path).modes()}
+    assert modes["fast"]["speeds"] == list(SPEEDS)
+    assert modes["fast"]["day_minutes"] == list(DAY_MINUTES)
+    assert MODES["fast"].time_scale in SPEEDS
+    assert DEFAULT_DAY_MINUTES in DAY_MINUTES
+    assert modes["realtime"]["speeds"] == []
+
+
+def test_launch_refuses_speeds_and_day_lengths_not_offered(tmp_path: Path) -> None:
+    spawned = Spawned()
+    api = _api(tmp_path, spawned)
+    # What a page could send: none of these is offered.
+    bad: list[tuple[Any, Any]] = [(7, 60), (0, 60), (-90, 60), (True, 60), ("90", 60), (90, 45)]
+    for speed, minutes in bad:
+        assert api.launch("island", "fast", False, speed, minutes)["ok"] is False, speed
+    assert spawned.commands == []
 
 
 def test_launch_refuses_bad_worlds_and_modes(tmp_path: Path) -> None:
