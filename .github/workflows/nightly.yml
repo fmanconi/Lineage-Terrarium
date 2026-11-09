@@ -2,8 +2,8 @@
 name: nightly
 
 on:
-  schedule:
-    - cron: "17 2 * * *"
+  # On demand only in this fork: the slow suite ran past GitHub's 6-hour limit and
+  # failed every night (2026-11-09). Run it from the Actions tab when the sim changes.
   workflow_dispatch:
 
 jobs:
