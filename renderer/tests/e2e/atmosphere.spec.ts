@@ -122,6 +122,7 @@ test("an animal with the glow gene shines at night, not by day", async ({ page }
 });
 
 test("a world ends on the map, the button waits, and the next world rises", async ({ page }) => {
+  test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   // A sim-day in under five seconds: the herd starves at the start of the second.

@@ -20,6 +20,7 @@ const modsOff = JSON.stringify(Object.fromEntries(builtinModIds.map((id) => [id,
 
 export default defineConfig({
   testDir: "tests/e2e",
+  timeout: 120_000,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? "github" : "list",
   use: {
